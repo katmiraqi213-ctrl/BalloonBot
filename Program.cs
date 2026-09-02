@@ -8,27 +8,22 @@ using WolfLive.Api.Models;
 
 public class Program
 {
-    private static IWolfClient _client = null!;
-
-    internal static BalloonGame? Game;
+    public static IWolfClient? Client;
+    public static BalloonGame? Game;
 
     public static async Task Main(string[] args)
     {
-        string email =
-            Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
-
-        string password =
-            Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
+        string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
+        string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
         if (string.IsNullOrWhiteSpace(email) ||
             string.IsNullOrWhiteSpace(password))
         {
-            Console.WriteLine(
-                "❌ WOLF_EMAIL أو WOLF_PASSWORD غير موجود.");
+            Console.WriteLine("❌ WOLF_EMAIL أو WOLF_PASSWORD غير موجود.");
             return;
         }
 
-        _client = new WolfClient()
+        Client = new WolfClient()
             .SetupCommands()
             .WithCommandSet(c =>
             {
@@ -38,121 +33,79 @@ public class Program
             .WithSerilog()
             .Done();
 
-        _client.OnConnected += (_) =>
+        Client.OnConnected += (_) =>
         {
-            Console.WriteLine(
-                "✅ Connected to wolf.live!");
+            Console.WriteLine("✅ Connected to Wolf Live!");
         };
 
-        _client.Messaging.OnMessage += async (client, message) =>
+        Client.Messaging.OnMessage += async (client, message) =>
         {
             try
             {
-                string text =
-                    message.Content?.Trim() ?? "";
+                string text = message.Content?.Trim() ?? "";
 
                 Console.WriteLine(
                     $"📩 Message: [{text}] " +
                     $"User={message.UserId} " +
                     $"Group={message.GroupId}");
 
+                // الأرقام تُستخدم أثناء اللعب
                 if (int.TryParse(text, out int number))
                 {
-                    await HandleNumber(
-                        client,
-                        message,
-                        number);
+                    await HandleNumber(client, message, number);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine(
-                    "❌ Message error: " +
-                    ex.Message);
+                Console.WriteLine("❌ Message error: " + ex.Message);
             }
         };
 
-        bool result =
-            await _client.Login(
-                email,
-                password);
+        Console.WriteLine("🚀 BalloonBot starting...");
 
-        Console.WriteLine(
-            $"Login {(result ? "success!" : "failed!")}");
-
-        if (!result)
-            return;
+        await Client.Login(email, password);
 
         await Task.Delay(-1);
     }
 
-    private static async Task HandleNumber(
+    public static async Task HandleNumber(
         IWolfClient client,
         Message message,
         int number)
     {
-        if (Game == null ||
-            !Game.Started)
+        if (Game == null || !Game.Started)
             return;
 
-        if (!string.IsNullOrEmpty(Game.GroupId) &&
-            message.GroupId != Game.GroupId)
+        string groupId = message.GroupId ?? "";
+
+        // منع استقبال الأرقام من غرفة ثانية
+        if (Game.GroupId != groupId)
             return;
 
-        if (number < 1)
+        BalloonPlayer? current = Game.GetCurrentPlayer();
+
+        if (current == null)
             return;
 
-        BalloonPlayer? player =
-            Game.GetPlayer(message.UserId);
-
-        if (player == null)
-        {
-            await message.Reply(
-                client,
-                "❌ أنت مو مشترك باللعبة.\n" +
-                "اكتب: !بالونات انضم");
-            return;
-        }
-
-        if (player.Eliminated)
-        {
-            await message.Reply(
-                client,
-                "❌ أنت خارج اللعبة.");
-            return;
-        }
-
-        if (Game.CurrentPlayerId != player.UserId)
+        // فقط صاحب الدور يستطيع اللعب
+        if (current.UserId != message.UserId)
             return;
 
-        // =========================
         // اختيار الخصم
-        // =========================
-
         if (Game.WaitingForOpponent)
         {
-            if (number > Game.AlivePlayers.Count)
+            BalloonPlayer? opponent = Game.GetPlayerByNumber(number);
+
+            if (opponent == null)
             {
                 await message.Reply(
                     client,
-                    $"❌ اختار رقم لاعب من 1 إلى " +
-                    $"{Game.AlivePlayers.Count}.");
+                    "❌ رقم اللاعب غير صحيح.\n" +
+                    "اختار رقم لاعب موجود.");
                 return;
             }
 
-            BalloonPlayer? opponent =
-                Game.GetPlayerByNumber(number);
-
-            if (opponent == null ||
-                opponent.Eliminated)
-            {
-                await message.Reply(
-                    client,
-                    "❌ هذا اللاعب غير موجود.");
-                return;
-            }
-
-            if (opponent.UserId == player.UserId)
+            if (opponent.UserId == current.UserId)
             {
                 await message.Reply(
                     client,
@@ -160,43 +113,50 @@ public class Program
                 return;
             }
 
-            Game.SelectedOpponentId =
-                opponent.UserId;
+            if (!opponent.Alive)
+            {
+                await message.Reply(
+                    client,
+                    "❌ هذا اللاعب خارج اللعبة.");
+                return;
+            }
 
+            Game.SelectedOpponentId = opponent.UserId;
             Game.WaitingForOpponent = false;
             Game.WaitingForBalloon = true;
 
             await message.Reply(
                 client,
-                $"🎯 اخترت: {opponent.Name}\n\n" +
+                $"🎯 تم اختيار: {opponent.Name}\n\n" +
                 $"🎈 عنده {opponent.Balloons} بالونات.\n" +
-                $"اختار رقم البالون من 1 إلى " +
-                $"{opponent.Balloons}.");
+                $"اختار رقم البالون من **1 إلى {opponent.Balloons}**.");
 
             return;
         }
 
-        // =========================
         // اختيار البالون
-        // =========================
-
         if (Game.WaitingForBalloon)
         {
-            if (Game.SelectedOpponentId == null)
+            if (number < 1)
+            {
+                await message.Reply(
+                    client,
+                    "❌ رقم البالون غير صحيح.");
                 return;
+            }
 
             BalloonPlayer? opponent =
-                Game.GetPlayer(
-                    Game.SelectedOpponentId);
+                Game.GetPlayer(Game.SelectedOpponentId);
 
-            if (opponent == null ||
-                opponent.Eliminated)
+            if (opponent == null || !opponent.Alive)
             {
                 Game.ResetTurnSelection();
 
                 await message.Reply(
                     client,
-                    "❌ الخصم لم يعد متاحاً.");
+                    "❌ الخصم غير متاح.");
+                
+                await SendTurnMessage(client, message);
                 return;
             }
 
@@ -204,204 +164,156 @@ public class Program
             {
                 await message.Reply(
                     client,
-                    $"❌ اختار رقم من 1 إلى " +
-                    $"{opponent.Balloons}.");
+                    $"❌ عنده فقط {opponent.Balloons} بالونات.\n" +
+                    $"اختار رقم من 1 إلى {opponent.Balloons}.");
                 return;
             }
 
-            await ResolveBalloon(
-                client,
-                message,
-                player,
-                opponent,
-                number);
+            await ResolveBalloon(client, message, current, opponent, number);
         }
     }
 
-    private static async Task ResolveBalloon(
+    public static async Task ResolveBalloon(
         IWolfClient client,
         Message message,
-        BalloonPlayer attacker,
+        BalloonPlayer current,
         BalloonPlayer opponent,
         int balloonNumber)
     {
-        Game!.ResetTurnSelection();
+        Random random = Random.Shared;
+        int chance = random.Next(1, 101);
 
-        int roll =
-            Random.Shared.Next(1, 101);
-
-        // =========================
         // 15% حظ
-        // =========================
-
-        if (roll <= 15)
+        if (chance <= 15)
         {
+            Game!.ResetTurnSelection();
+
             await message.Reply(
                 client,
-                $"🍀 حظ!\n\n" +
-                $"🎈 البالون رقم {balloonNumber} " +
-                $"ما انفجر!\n" +
-                $"😎 {opponent.Name} نجا.\n\n" +
-                $"➡️ الدور ينتقل.");
+                $"🍀 حظ! {current.Name} اختار البالون رقم {balloonNumber}\n\n" +
+                $"🎈 البالون ما انفجر!\n" +
+                $"🛡️ {opponent.Name} ما خسر أي بالون.\n\n" +
+                $"🔄 الدور ينتقل للاعب التالي.");
 
             Game.NextTurn();
 
-            await SendTurnMessage(
-                client,
-                message);
+            if (Game.CheckWinner(out BalloonPlayer? winner))
+            {
+                await FinishGame(client, message, winner!);
+                return;
+            }
 
+            await SendTurnMessage(client, message);
             return;
         }
 
-        // =========================
         // 15% نجاة
-        // =========================
-
-        if (roll <= 30)
+        if (chance <= 30)
         {
+            Game!.ResetTurnSelection();
+
             await message.Reply(
                 client,
-                $"🛡️ نجاة!\n\n" +
-                $"🎈 البالون رقم {balloonNumber} " +
-                $"بقي مكانه.\n" +
-                $"👏 {opponent.Name} نجا.\n\n" +
-                $"➡️ الدور ينتقل.");
+                $"🛡️ نجاة! {current.Name} اختار البالون رقم {balloonNumber}\n\n" +
+                $"🎈 البالون نجا وما انفجر!\n\n" +
+                $"🔄 الدور ينتقل للاعب التالي.");
 
             Game.NextTurn();
 
-            await SendTurnMessage(
-                client,
-                message);
+            if (Game.CheckWinner(out BalloonPlayer? winner))
+            {
+                await FinishGame(client, message, winner!);
+                return;
+            }
 
+            await SendTurnMessage(client, message);
             return;
         }
 
-        // =========================
         // 10% دور إضافي
-        // =========================
-
-        if (roll <= 40)
+        if (chance <= 40)
         {
             opponent.Balloons--;
 
-            if (opponent.Balloons < 0)
-                opponent.Balloons = 0;
+            string result =
+                $"🔄 دور إضافي!\n\n" +
+                $"👤 {current.Name}\n" +
+                $"🎯 اختار {opponent.Name}\n" +
+                $"🎈 البالون رقم {balloonNumber} انفجر!\n\n" +
+                $"💥 خسر {opponent.Name} بالون واحد.\n" +
+                $"🎈 المتبقي عنده: {opponent.Balloons}";
 
-            if (opponent.Balloons == 0)
+            if (opponent.Balloons <= 0)
             {
-                opponent.Eliminated = true;
+                opponent.Balloons = 0;
+                opponent.Alive = false;
 
-                await message.Reply(
-                    client,
-                    $"💥🎈 انفجار!\n\n" +
-                    $"🎈 البالون رقم " +
-                    $"{balloonNumber} انفجر!\n" +
-                    $"❌ {opponent.Name} خسر آخر بالون.\n\n" +
-                    $"🔥 عندك دور إضافي!");
+                result +=
+                    $"\n\n💀 {opponent.Name} خرج من اللعبة!";
+            }
 
-                if (Game.CheckWinner(
-                    out BalloonPlayer? winner))
-                {
-                    await FinishGame(
-                        client,
-                        message,
-                        winner!);
+            await message.Reply(client, result);
 
-                    return;
-                }
+            Game!.ResetTurnSelection();
 
-                await SendTurnMessage(
-                    client,
-                    message);
-
+            if (Game.CheckWinner(out BalloonPlayer? winner))
+            {
+                await FinishGame(client, message, winner!);
                 return;
             }
 
+            // لا ننتقل للدور
             await message.Reply(
                 client,
-                $"🔄 دور إضافي!\n\n" +
-                $"💥 البالون رقم {balloonNumber} " +
-                $"انفجر!\n" +
-                $"❌ {opponent.Name} خسر بالوناً.\n" +
-                $"🎈 المتبقي: {opponent.Balloons}\n\n" +
-                $"🔥 {attacker.Name} عنده دور إضافي!");
-
-            await SendTurnMessage(
-                client,
-                message);
+                $"🔄 {current.Name} عنده دور إضافي!\n" +
+                $"🎯 اختار رقم الخصم.");
 
             return;
         }
 
-        // =========================
         // 60% انفجار طبيعي
-        // =========================
-
         opponent.Balloons--;
 
-        if (opponent.Balloons < 0)
-            opponent.Balloons = 0;
+        string normalResult =
+            $"💥 انفجار طبيعي!\n\n" +
+            $"👤 {current.Name}\n" +
+            $"🎯 اختار {opponent.Name}\n" +
+            $"🎈 البالون رقم {balloonNumber} انفجر!\n\n" +
+            $"📉 خسر {opponent.Name} بالون واحد.\n" +
+            $"🎈 المتبقي: {opponent.Balloons}";
 
-        if (opponent.Balloons == 0)
+        if (opponent.Balloons <= 0)
         {
-            opponent.Eliminated = true;
+            opponent.Balloons = 0;
+            opponent.Alive = false;
 
-            await message.Reply(
-                client,
-                $"💥🎈 انفجر البالون رقم " +
-                $"{balloonNumber}!\n\n" +
-                $"❌ {opponent.Name} خسر آخر بالون.\n" +
-                $"☠️ تم إقصاؤه.");
-
-            if (Game.CheckWinner(
-                out BalloonPlayer? winner))
-            {
-                await FinishGame(
-                    client,
-                    message,
-                    winner!);
-
-                return;
-            }
-
-            Game.NextTurn();
-
-            await SendTurnMessage(
-                client,
-                message);
-
-            return;
+            normalResult +=
+                $"\n\n💀 {opponent.Name} خرج من اللعبة!";
         }
 
-        await message.Reply(
-            client,
-            $"💥🎈 انفجر البالون رقم " +
-            $"{balloonNumber}!\n\n" +
-            $"❌ {opponent.Name} خسر بالوناً.\n" +
-            $"🎈 المتبقي: {opponent.Balloons}\n\n" +
-            $"➡️ الدور ينتقل.");
+        await message.Reply(client, normalResult);
+
+        Game.ResetTurnSelection();
+
+        if (Game.CheckWinner(out BalloonPlayer? normalWinner))
+        {
+            await FinishGame(client, message, normalWinner!);
+            return;
+        }
 
         Game.NextTurn();
 
-        await SendTurnMessage(
-            client,
-            message);
+        await SendTurnMessage(client, message);
     }
 
-    // =========================
-    // رسالة الدور الجديد
-    // =========================
-
-    private static async Task SendTurnMessage(
+    public static async Task SendTurnMessage(
         IWolfClient client,
         Message message)
     {
-        if (Game == null ||
-            !Game.Started)
+        if (Game == null || !Game.Started)
             return;
 
-        BalloonPlayer? current =
-            Game.GetCurrentPlayer();
+        BalloonPlayer? current = Game.GetCurrentPlayer();
 
         if (current == null)
             return;
@@ -414,11 +326,7 @@ public class Program
             $"👤 {current.Name} اختار رقم الخصم.");
     }
 
-    // =========================
-    // نهاية اللعبة
-    // =========================
-
-    private static async Task FinishGame(
+    public static async Task FinishGame(
         IWolfClient client,
         Message message,
         BalloonPlayer winner)
@@ -434,16 +342,70 @@ public class Program
     }
 }
 
-// ==================================================
+
+// ======================================================
 // أوامر لعبة البالونات
-// ==================================================
+// ======================================================
 
 public class BalloonCommands : WolfContext
 {
+    // أمر واحد فقط لمعالجة كل أوامر البالونات
     [Command("بالونات")]
-    public async Task Help(string message)
+    public async Task BalloonsCommand(string message)
     {
-        await this.Reply(
+        string command = message?.Trim() ?? "";
+
+        // !بالونات
+        if (string.IsNullOrWhiteSpace(command) ||
+            command.Equals("مساعدة", StringComparison.OrdinalIgnoreCase))
+        {
+            await ShowHelp();
+            return;
+        }
+
+        // !بالونات جديد
+        if (command.Equals("جديد", StringComparison.OrdinalIgnoreCase))
+        {
+            await NewGame();
+            return;
+        }
+
+        // !بالونات انضم
+        if (command.Equals("انضم", StringComparison.OrdinalIgnoreCase) ||
+            command.Equals("انضمام", StringComparison.OrdinalIgnoreCase))
+        {
+            await JoinGame();
+            return;
+        }
+
+        // !بالونات لاعبين
+        if (command.Equals("لاعبين", StringComparison.OrdinalIgnoreCase))
+        {
+            await ShowPlayers();
+            return;
+        }
+
+        // !بالونات بدء
+        if (command.Equals("بدء", StringComparison.OrdinalIgnoreCase))
+        {
+            await StartGame();
+            return;
+        }
+
+        // !بالونات انهاء
+        if (command.Equals("انهاء", StringComparison.OrdinalIgnoreCase) ||
+            command.Equals("إنهاء", StringComparison.OrdinalIgnoreCase))
+        {
+            await EndGame();
+            return;
+        }
+
+        await ShowHelp();
+    }
+
+    private async Task ShowHelp()
+    {
+        await Reply(
             "🎈🔥 لعبة البالونات 🔥🎈\n\n" +
             "الأوامر:\n\n" +
             "🎮 !بالونات جديد\n" +
@@ -457,346 +419,256 @@ public class BalloonCommands : WolfContext
             "🍀 15% حظ\n" +
             "🛡️ 15% نجاة\n" +
             "🔄 10% دور إضافي\n" +
-            "💥 60% انفجار طبيعي");
+            "💥 60% انفجار طبيعي"
+        );
     }
 
-    [Command("بالونات مساعدة")]
-    public async Task Help2(string message)
+    private async Task NewGame()
     {
-        await Help(message);
-    }
-
-    // =========================
-    // إنشاء لعبة
-    // =========================
-
-    [Command("بالونات جديد")]
-    public async Task NewGame(string message)
-    {
-        if (Program.Game != null &&
-            Program.Game.Started)
+        if (Program.Game != null && Program.Game.Started)
         {
-            await this.Reply(
-                "❌ توجد لعبة قيد التشغيل.");
+            await Reply("❌ توجد لعبة قيد التشغيل بالفعل.");
             return;
         }
 
-        Program.Game =
-            new BalloonGame();
+        string groupId = Message.GroupId ?? "";
 
-        await this.Reply(
+        Program.Game = new BalloonGame(groupId);
+
+        await Reply(
             "🎈🔥 تم إنشاء لعبة البالونات! 🔥🎈\n\n" +
-            "كل لاعب يبدأ بـ 7 🎈\n\n" +
-            "للانضمام:\n" +
-            "!بالونات انضم\n\n" +
-            "بعدها:\n" +
-            "!بالونات بدء");
+            "👤 كل لاعب يبدأ بـ 7 بالونات.\n\n" +
+            "للدخول باللعبة اكتب:\n" +
+            "👉 !بالونات انضم"
+        );
     }
 
-    // =========================
-    // انضمام
-    // =========================
-
-    [Command("بالونات انضم")]
-    public async Task Join(string message)
+    private async Task JoinGame()
     {
         if (Program.Game == null)
         {
-            await this.Reply(
-                "❌ ماكو لعبة.\n" +
-                "اكتب !بالونات جديد");
+            await Reply(
+                "❌ ماكو لعبة حالياً.\n\n" +
+                "🎮 اكتب !بالونات جديد");
             return;
         }
 
         if (Program.Game.Started)
         {
-            await this.Reply(
-                "❌ اللعبة بدأت بالفعل.");
+            await Reply("❌ اللعبة بدأت بالفعل، ما تگدر تنضم الآن.");
             return;
         }
 
-        string userId =
-            Message.UserId;
+        string userId = Message.UserId;
+        string groupId = Message.GroupId ?? "";
 
-        string groupId =
-            Message.GroupId ?? "";
+        if (Program.Game.GroupId != groupId)
+        {
+            await Reply("❌ اللعبة منشأة في غرفة ثانية.");
+            return;
+        }
 
         string result =
-            Program.Game.AddPlayer(
-                userId,
-                groupId);
+            Program.Game.AddPlayer(userId, groupId);
 
-        await this.Reply(result);
+        await Reply(result);
     }
 
-    [Command("بالونات انضمام")]
-    public async Task Join2(string message)
-    {
-        await Join(message);
-    }
-
-    // =========================
-    // عرض اللاعبين
-    // =========================
-
-    [Command("بالونات لاعبين")]
-    public async Task Players(string message)
+    private async Task ShowPlayers()
     {
         if (Program.Game == null)
         {
-            await this.Reply(
-                "❌ ماكو لعبة حالياً.");
+            await Reply(
+                "❌ ماكو لعبة حالياً.\n\n" +
+                "🎮 اكتب !بالونات جديد");
             return;
         }
 
-        await this.Reply(
-            Program.Game.GetPlayersText());
+        await Reply(Program.Game.GetPlayersText());
     }
 
-    // =========================
-    // بدء اللعبة
-    // =========================
-
-    [Command("بالونات بدء")]
-    public async Task Start(string message)
+    private async Task StartGame()
     {
         if (Program.Game == null)
         {
-            await this.Reply(
-                "❌ ماكو لعبة.\n" +
-                "اكتب !بالونات جديد");
+            await Reply("❌ ماكو لعبة. اكتب !بالونات جديد");
             return;
         }
 
         if (Program.Game.Started)
         {
-            await this.Reply(
-                "❌ اللعبة بدأت بالفعل.");
+            await Reply("❌ اللعبة بدأت بالفعل.");
             return;
         }
 
         if (Program.Game.Players.Count < 2)
         {
-            await this.Reply(
-                "❌ لازم لاعبين اثنين على الأقل.");
+            await Reply(
+                "❌ لازم يكون عدد اللاعبين على الأقل 2.\n\n" +
+                "👤 خلي اللاعبين يكتبون:\n" +
+                "!بالونات انضم");
             return;
         }
 
         Program.Game.Started = true;
-
         Program.Game.CurrentPlayerIndex = 0;
-
         Program.Game.ResetTurnSelection();
 
-        await this.Reply(
-            "🎈🔥🔥 بدأت لعبة البالونات! 🔥🔥🎈\n\n" +
+        BalloonPlayer? current =
+            Program.Game.GetCurrentPlayer();
+
+        await Reply(
+            "🚀🔥 بدأت لعبة البالونات! 🔥🚀\n\n" +
             Program.Game.GetPlayersText() +
             "\n\n" +
-            $"🎯 الدور على: " +
-            $"{Program.Game.GetCurrentPlayer()?.Name}\n\n" +
-            "👤 اختار رقم الخصم.");
+            $"🎯 أول دور: {current?.Name}\n" +
+            $"👤 {current?.Name} اختار رقم الخصم.");
     }
 
-    // =========================
-    // إنهاء اللعبة
-    // =========================
-
-    [Command("بالونات انهاء")]
-    public async Task Stop(string message)
+    private async Task EndGame()
     {
         if (Program.Game == null)
         {
-            await this.Reply(
-                "❌ ماكو لعبة حالياً.");
+            await Reply("❌ ماكو لعبة حالياً.");
             return;
         }
 
         Program.Game = null;
 
-        await this.Reply(
-            "🛑 تم إنهاء لعبة البالونات.");
-    }
-
-    [Command("بالونات إنهاء")]
-    public async Task Stop2(string message)
-    {
-        await Stop(message);
+        await Reply(
+            "🛑 تم إنهاء لعبة البالونات.\n\n" +
+            "🎈 تگدرون تسوون لعبة جديدة بـ:\n" +
+            "!بالونات جديد");
     }
 }
 
-// ==================================================
+
+// ======================================================
 // نظام اللعبة
-// ==================================================
+// ======================================================
 
 public class BalloonGame
 {
-    public string GroupId { get; private set; } = "";
+    public string GroupId { get; }
+
+    public List<BalloonPlayer> Players { get; } =
+        new List<BalloonPlayer>();
 
     public bool Started { get; set; }
 
     public int CurrentPlayerIndex { get; set; }
 
-    public bool WaitingForOpponent { get; set; } = true;
+    public bool WaitingForOpponent { get; set; }
 
     public bool WaitingForBalloon { get; set; }
 
     public string? SelectedOpponentId { get; set; }
 
-    public List<BalloonPlayer> Players { get; } =
-        new List<BalloonPlayer>();
-
-    public List<BalloonPlayer> AlivePlayers =>
-        Players
-            .Where(p => !p.Eliminated)
-            .ToList();
-
-    public string? CurrentPlayerId
+    public BalloonGame(string groupId)
     {
-        get
-        {
-            return GetCurrentPlayer()?.UserId;
-        }
+        GroupId = groupId;
+        Started = false;
+        CurrentPlayerIndex = 0;
+        ResetTurnSelection();
     }
-
-    // =========================
-    // إضافة لاعب
-    // =========================
 
     public string AddPlayer(
         string userId,
         string groupId)
     {
-        if (Players.Any(
-            p => p.UserId == userId))
-        {
-            return "❌ أنت مشترك بالفعل.";
-        }
+        if (GroupId != groupId)
+            return "❌ ما تگدر تنضم لهذه اللعبة.";
+
+        if (Players.Any(p => p.UserId == userId))
+            return "❌ أنت داخل اللعبة بالفعل.";
 
         if (Players.Count >= 50)
-        {
-            return
-                "❌ وصلت اللعبة للحد الأقصى " +
-                "50 لاعب.";
-        }
+            return "❌ اللعبة وصلت للحد الأقصى 50 لاعب.";
 
-        if (Players.Count == 0)
-        {
-            GroupId = groupId;
-        }
+        int number = Players.Count + 1;
 
-        if (GroupId != groupId)
-        {
-            return
-                "❌ هذه اللعبة مرتبطة بروم آخر.";
-        }
+        BalloonPlayer player = new BalloonPlayer(
+            userId,
+            $"لاعب {number}",
+            number);
 
-        string name =
-            $"لاعب {Players.Count + 1}";
-
-        Players.Add(
-            new BalloonPlayer(
-                userId,
-                name));
+        Players.Add(player);
 
         return
-            $"✅ تم انضمامك!\n\n" +
-            $"👤 {name}\n" +
-            $"🎈 7 بالونات\n\n" +
-            GetPlayersText();
+            $"🎉 تم انضمامك للعبة!\n\n" +
+            $"👤 {player.Name}\n" +
+            $"🔢 رقمك: {player.Number}\n" +
+            $"🎈 بالوناتك: {player.Balloons}\n\n" +
+            $"👥 عدد اللاعبين الآن: {Players.Count}";
     }
 
-    // =========================
-    // الحصول على لاعب
-    // =========================
-
-    public BalloonPlayer? GetPlayer(
-        string userId)
+    public BalloonPlayer? GetPlayer(string? userId)
     {
+        if (string.IsNullOrWhiteSpace(userId))
+            return null;
+
         return Players.FirstOrDefault(
             p => p.UserId == userId);
     }
 
-    // =========================
-    // اللاعب حسب الرقم
-    // =========================
-
-    public BalloonPlayer? GetPlayerByNumber(
-        int number)
+    public BalloonPlayer? GetPlayerByNumber(int number)
     {
-        if (number < 1 ||
-            number > AlivePlayers.Count)
-            return null;
-
-        return AlivePlayers[number - 1];
+        return Players.FirstOrDefault(
+            p => p.Number == number && p.Alive);
     }
 
-    // =========================
-    // اللاعب الحالي
-    // =========================
+    public List<BalloonPlayer> AlivePlayers
+    {
+        get
+        {
+            return Players
+                .Where(p => p.Alive)
+                .ToList();
+        }
+    }
 
     public BalloonPlayer? GetCurrentPlayer()
     {
-        var alive =
-            AlivePlayers;
+        List<BalloonPlayer> alive = AlivePlayers;
 
         if (alive.Count == 0)
             return null;
 
-        if (CurrentPlayerIndex >=
-            alive.Count)
+        if (CurrentPlayerIndex < 0 ||
+            CurrentPlayerIndex >= alive.Count)
         {
             CurrentPlayerIndex = 0;
         }
 
-        return alive[
-            CurrentPlayerIndex];
+        return alive[CurrentPlayerIndex];
     }
-
-    // =========================
-    // الانتقال للدور التالي
-    // =========================
 
     public void NextTurn()
     {
-        var alive =
-            AlivePlayers;
+        List<BalloonPlayer> alive = AlivePlayers;
 
         if (alive.Count == 0)
             return;
 
         CurrentPlayerIndex++;
 
-        if (CurrentPlayerIndex >=
-            alive.Count)
-        {
+        if (CurrentPlayerIndex >= alive.Count)
             CurrentPlayerIndex = 0;
-        }
 
         ResetTurnSelection();
     }
 
-    // =========================
-    // إعادة اختيار الدور
-    // =========================
-
     public void ResetTurnSelection()
     {
         WaitingForOpponent = true;
-
         WaitingForBalloon = false;
-
         SelectedOpponentId = null;
     }
-
-    // =========================
-    // فحص الفائز
-    // =========================
 
     public bool CheckWinner(
         out BalloonPlayer? winner)
     {
-        var alive =
-            AlivePlayers;
+        List<BalloonPlayer> alive = AlivePlayers;
 
         if (alive.Count == 1)
         {
@@ -805,80 +677,41 @@ public class BalloonGame
         }
 
         winner = null;
-
         return false;
     }
-
-    // =========================
-    // عرض اللاعبين
-    // =========================
 
     public string GetPlayersText()
     {
         if (Players.Count == 0)
+            return "👥 ماكو لاعبين حالياً.";
+
+        string text = "📋🎈 اللاعبين:\n\n";
+
+        foreach (BalloonPlayer player in Players)
         {
-            return "👥 لا يوجد لاعبين.";
-        }
+            string balloons = string.Concat(
+                Enumerable.Repeat(
+                    "🎈",
+                    Math.Min(player.Balloons, 7)));
 
-        var alive =
-            AlivePlayers;
-
-        var lines =
-            new List<string>();
-
-        for (int i = 0;
-             i < alive.Count;
-             i++)
-        {
-            BalloonPlayer player =
-                alive[i];
-
-            string balloons =
-                string.Concat(
-                    Enumerable.Repeat(
-                        "🎈",
-                        Math.Min(
-                            player.Balloons,
-                            7)));
-
-            lines.Add(
-                $"{NumberEmoji(i + 1)} " +
-                $"{player.Name} — " +
-                $"{player.Balloons} {balloons}");
-        }
-
-        var eliminated =
-            Players
-                .Where(p => p.Eliminated)
-                .ToList();
-
-        if (eliminated.Count > 0)
-        {
-            lines.Add("");
-
-            lines.Add(
-                "☠️ المقصيون:");
-
-            foreach (
-                BalloonPlayer player
-                in eliminated)
+            if (player.Alive)
             {
-                lines.Add(
-                    $"❌ {player.Name} — 0 🎈");
+                text +=
+                    $"{NumberEmoji(player.Number)} " +
+                    $"{player.Name} — " +
+                    $"{player.Balloons} {balloons}\n";
+            }
+            else
+            {
+                text +=
+                    $"💀 {player.Name} — خارج اللعبة\n";
             }
         }
 
-        return string.Join(
-            "\n",
-            lines);
+        return text;
     }
 
-    // =========================
-    // أرقام اللاعبين
-    // =========================
-
-    private static string NumberEmoji(
-        int number)
+    private static string NumberEmoji(int number)
     {
         return number switch
         {
@@ -892,31 +725,37 @@ public class BalloonGame
             8 => "8️⃣",
             9 => "9️⃣",
             10 => "🔟",
-            _ => $"{number}."
+            _ => number + "."
         };
     }
 }
 
-// ==================================================
-// بيانات اللاعب
-// ==================================================
+
+// ======================================================
+// اللاعب
+// ======================================================
 
 public class BalloonPlayer
 {
     public string UserId { get; }
 
-    public string Name { get; }
+    public string Name { get; set; }
 
-    public int Balloons { get; set; } = 7;
+    public int Number { get; }
 
-    public bool Eliminated { get; set; }
+    public int Balloons { get; set; }
+
+    public bool Alive { get; set; }
 
     public BalloonPlayer(
         string userId,
-        string name)
+        string name,
+        int number)
     {
         UserId = userId;
-
         Name = name;
+        Number = number;
+        Balloons = 7;
+        Alive = true;
     }
 }
