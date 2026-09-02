@@ -6,6 +6,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: balloonbot
+  cancel-in-progress: true
+
 jobs:
   run-bot:
     runs-on: ubuntu-latest
@@ -32,12 +36,14 @@ jobs:
         run: |
           if [ -z "$WOLF_EMAIL" ]; then
             echo "❌ WOLF_EMAIL غير موجود"
+            exit 1
           else
             echo "✅ WOLF_EMAIL موجود"
           fi
 
           if [ -z "$WOLF_PASSWORD" ]; then
             echo "❌ WOLF_PASSWORD غير موجود"
+            exit 1
           else
             echo "✅ WOLF_PASSWORD موجود"
           fi
