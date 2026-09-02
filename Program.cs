@@ -36,22 +36,19 @@ namespace BalloonBot
 
             _client = new WolfClient();
 
-            _client.OnConnected += () =>
+            // =====================================================
+            // اتصال WOLF
+            // =====================================================
+
+            _client.OnConnected += (_) =>
             {
                 Console.WriteLine("✅ تم الاتصال بـ WOLF.");
+                return Task.CompletedTask;
             };
 
-            _client.OnDisconnected += (ex) =>
-            {
-                Console.WriteLine("⚠️ انقطع الاتصال بـ WOLF.");
-            };
-
-            _client.OnConnectionError += (ex) =>
-            {
-                Console.WriteLine(
-                    "❌ Connection Error: " + ex.Message
-                );
-            };
+            // =====================================================
+            // استقبال الرسائل
+            // =====================================================
 
             _client.Messaging.OnMessage += async (client, message) =>
             {
@@ -67,9 +64,9 @@ namespace BalloonBot
                         $"📩 Message: {text} | User: {message.UserId}"
                     );
 
-                    // ==========================================
+                    // =================================================
                     // الأرقام أثناء اللعبة
-                    // ==========================================
+                    // =================================================
 
                     if (TryParseNumber(text, out int number))
                     {
@@ -87,9 +84,9 @@ namespace BalloonBot
                         return;
                     }
 
-                    // ==========================================
+                    // =================================================
                     // أوامر البالونات
-                    // ==========================================
+                    // =================================================
 
                     if (!text.StartsWith(
                             "!بالونات",
@@ -111,13 +108,14 @@ namespace BalloonBot
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(
-                        "❌ COMMAND ERROR:"
-                    );
-
+                    Console.WriteLine("❌ COMMAND ERROR:");
                     Console.WriteLine(ex);
                 }
             };
+
+            // =====================================================
+            // تسجيل الدخول
+            // =====================================================
 
             bool loginResult =
                 await _client.Login(
@@ -137,6 +135,10 @@ namespace BalloonBot
             Console.WriteLine(
                 "✅ تم تسجيل الدخول بنجاح."
             );
+
+            // =====================================================
+            // الاتصال
+            // =====================================================
 
             await _client.Connect();
 
@@ -217,7 +219,9 @@ namespace BalloonBot
         {
             string help =
                 "🎈 لعبة البالونات 🎈\n\n" +
+
                 "📌 الأوامر:\n\n" +
+
                 "🎮 !بالونات جديد\n" +
                 "إنشاء لعبة جديدة\n\n" +
 
@@ -238,8 +242,8 @@ namespace BalloonBot
 
                 "🎈 كل لاعب يبدأ بـ 7 بالونات.\n" +
                 "🎯 اللاعب الحالي يختار رقم اللاعب المنافس.\n" +
-                "🎈 بعدها يختار رقم البالون من 1 إلى 7.\n" +
-                "💥 بعض البالونات تنفجر وبعضها لها تأثيرات عشوائية.\n" +
+                "🎈 بعدها يختار رقم البالون.\n" +
+                "💥 البالونات لها تأثيرات عشوائية.\n" +
                 "👑 آخر لاعب يبقى هو الفائز.";
 
             await Reply(
@@ -290,7 +294,7 @@ namespace BalloonBot
                 client,
                 message,
                 "🎈🔥 تم إنشاء لعبة البالونات!\n\n" +
-                "👥 اللعبة فردية، كل لاعب يلعب لنفسه.\n" +
+                "👥 اللعبة فردية.\n" +
                 "🎈 كل لاعب يبدأ بـ 7 بالونات.\n\n" +
                 "للانضمام اكتب:\n" +
                 "!بالونات انضم"
@@ -480,13 +484,34 @@ namespace BalloonBot
             _game.Started = true;
             _game.CurrentPlayerIndex = 0;
 
+            // مهم جداً: أول لاعب يختار منافس مباشرة
+            _game.WaitingForOpponent = true;
+            _game.WaitingForBalloon = false;
+            _game.SelectedOpponentId = "";
+
+            BalloonPlayer? firstPlayer =
+                _game.CurrentPlayer;
+
+            if (firstPlayer == null)
+            {
+                _game.Started = false;
+
+                await Reply(
+                    client,
+                    message,
+                    "❌ تعذر تحديد اللاعب الأول."
+                );
+
+                return;
+            }
+
             await Reply(
                 client,
                 message,
                 "🎈🔥 بدأت لعبة البالونات!\n\n" +
                 BuildPlayersBoard() +
                 "\n\n" +
-                $"🎯 الدور على: {_game.CurrentPlayer.Name}\n\n" +
+                $"🎯 الدور على: {firstPlayer.Name}\n\n" +
                 "اختر رقم اللاعب الذي تريد اللعب ضده."
             );
         }
@@ -523,17 +548,14 @@ namespace BalloonBot
                 await Reply(
                     client,
                     message,
-                    $"⏳ مو دورك.\n" +
+                    "⏳ مو دورك.\n" +
                     $"🎯 الدور حالياً على: {current.Name}"
                 );
 
                 return;
             }
 
-            // =====================================================
             // اختيار المنافس
-            // =====================================================
-
             if (_game.WaitingForOpponent)
             {
                 await ChooseOpponent(
@@ -545,10 +567,7 @@ namespace BalloonBot
                 return;
             }
 
-            // =====================================================
             // اختيار البالون
-            // =====================================================
-
             if (_game.WaitingForBalloon)
             {
                 await ChooseBalloon(
@@ -699,14 +718,14 @@ namespace BalloonBot
                 await Reply(
                     client,
                     message,
-                    $"❌ هذا الرقم غير موجود.\n\n" +
+                    "❌ هذا الرقم غير موجود.\n\n" +
                     $"🎈 البالونات المتاحة:\n{available}"
                 );
 
                 return;
             }
 
-            // إزالة البالون مؤقتاً
+            // إزالة البالون
             opponent.ActiveBalloons.Remove(number);
 
             int effect =
@@ -717,7 +736,7 @@ namespace BalloonBot
             bool extraTurn = false;
 
             // =====================================================
-            // 🍀 حظ
+            // 🍀 حظ - البالون لا ينفجر
             // =====================================================
 
             if (effect <= 15)
@@ -741,7 +760,7 @@ namespace BalloonBot
                 result =
                     "🛡️🎈 نجاة!\n\n" +
                     $"البالون رقم {number} بقي موجوداً.\n" +
-                    $"لكن الدور ينتقل للاعب التالي.";
+                    "لكن الدور ينتقل للاعب التالي.";
             }
 
             // =====================================================
@@ -753,7 +772,7 @@ namespace BalloonBot
                 result =
                     "💥🎈 بوم!\n\n" +
                     $"انفجر البالون رقم {number} من {opponent.Name}.\n" +
-                    $"🔄 حصلت على دور إضافي!";
+                    "🔄 حصلت على دور إضافي!";
 
                 extraTurn = true;
             }
@@ -769,6 +788,10 @@ namespace BalloonBot
                     $"انفجر البالون رقم {number}!\n" +
                     $"😈 {opponent.Name} خسر بالوناً.";
             }
+
+            // =====================================================
+            // تحديث عدد البالونات
+            // =====================================================
 
             opponent.Balloons =
                 opponent.ActiveBalloons.Count;
@@ -787,7 +810,7 @@ namespace BalloonBot
             }
 
             // =====================================================
-            // فوز
+            // التحقق من الفائز
             // =====================================================
 
             int aliveCount =
@@ -802,14 +825,15 @@ namespace BalloonBot
                         x => !x.Eliminated
                     );
 
+                string winnerName =
+                    winner?.Name ?? "غير معروف";
+
                 _game.Started = false;
 
                 result +=
                     "\n\n🏆🎉 انتهت اللعبة!\n\n" +
-                    $"👑 الفائز: {winner?.Name ?? "غير معروف"}\n" +
+                    $"👑 الفائز: {winnerName}\n" +
                     "🎈🎈🎈 مبروك!";
-
-                ResetTurnState();
 
                 await Reply(
                     client,
@@ -823,7 +847,7 @@ namespace BalloonBot
             }
 
             // =====================================================
-            // الدور الإضافي
+            // 🔄 دور إضافي
             // =====================================================
 
             if (extraTurn)
@@ -855,6 +879,9 @@ namespace BalloonBot
             BalloonPlayer? next =
                 _game.CurrentPlayer;
 
+            string nextName =
+                next?.Name ?? "غير معروف";
+
             await Reply(
                 client,
                 message,
@@ -862,7 +889,7 @@ namespace BalloonBot
                 "\n\n" +
                 BuildPlayersBoard() +
                 "\n\n" +
-                $"🎯 الدور الآن على: {next?.Name}\n" +
+                $"🎯 الدور الآن على: {nextName}\n" +
                 "اختر رقم اللاعب."
             );
         }
@@ -886,7 +913,7 @@ namespace BalloonBot
 
                 string status =
                     player.Eliminated
-                        ? " ❌"
+                        ? " ❌ خرج"
                         : "";
 
                 result +=
@@ -1006,7 +1033,7 @@ namespace BalloonBot
         }
 
         // =========================================================
-        // تصفير حالة الاختيار
+        // تصفير حالة الدور
         // =========================================================
 
         private static void ResetTurnState()
@@ -1058,6 +1085,10 @@ namespace BalloonBot
             SelectedOpponentId = "";
         }
 
+        // =========================================================
+        // اللاعب الحالي
+        // =========================================================
+
         public BalloonPlayer? CurrentPlayer
         {
             get
@@ -1071,7 +1102,6 @@ namespace BalloonBot
                 if (CurrentPlayerIndex >= Players.Count)
                     CurrentPlayerIndex = 0;
 
-                // البحث عن اللاعب التالي غير الخارج
                 for (int i = 0; i < Players.Count; i++)
                 {
                     int index =
@@ -1094,6 +1124,10 @@ namespace BalloonBot
             }
         }
 
+        // =========================================================
+        // البحث عن لاعب
+        // =========================================================
+
         public BalloonPlayer? GetPlayer(
             string userId)
         {
@@ -1104,6 +1138,10 @@ namespace BalloonBot
                 x => x.UserId == userId
             );
         }
+
+        // =========================================================
+        // الانتقال للاعب التالي
+        // =========================================================
 
         public void MoveToNextPlayer()
         {
@@ -1156,7 +1194,7 @@ namespace BalloonBot
 
             set
             {
-                // القيمة يتم احتسابها من القائمة
+                // العدد محسوب تلقائياً من البالونات الموجودة
             }
         }
 
