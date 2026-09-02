@@ -27,14 +27,23 @@ jobs:
 
       - name: Check Secrets
         env:
-          EMAIL: ${{ secrets.WOLF_EMAIL_BALLOON }}
-          PASSWORD: ${{ secrets.WOLF_PASSWORD_BALLOON }}
+          WOLF_EMAIL: ${{ secrets.WOLF_EMAIL }}
+          WOLF_PASSWORD: ${{ secrets.WOLF_PASSWORD }}
         run: |
-          echo "Email length: ${#EMAIL}"
-          echo "Password length: ${#PASSWORD}"
+          if [ -z "$WOLF_EMAIL" ]; then
+            echo "❌ WOLF_EMAIL غير موجود"
+          else
+            echo "✅ WOLF_EMAIL موجود"
+          fi
+
+          if [ -z "$WOLF_PASSWORD" ]; then
+            echo "❌ WOLF_PASSWORD غير موجود"
+          else
+            echo "✅ WOLF_PASSWORD موجود"
+          fi
 
       - name: Run BalloonBot
         env:
-          WOLF_EMAIL_BALLOON: ${{ secrets.WOLF_EMAIL_BALLOON }}
-          WOLF_PASSWORD_BALLOON: ${{ secrets.WOLF_PASSWORD_BALLOON }}
+          WOLF_EMAIL: ${{ secrets.WOLF_EMAIL }}
+          WOLF_PASSWORD: ${{ secrets.WOLF_PASSWORD }}
         run: dotnet run --project BalloonBot.csproj --configuration Release --no-build
