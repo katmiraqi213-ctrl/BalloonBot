@@ -29,7 +29,7 @@ namespace BalloonBot
             }
 
             Console.WriteLine("🎈 تشغيل BalloonBot...");
-            
+
             _client = new WolfClient();
 
             Console.WriteLine("🔐 جاري تسجيل الدخول إلى Wolf...");
@@ -51,7 +51,7 @@ namespace BalloonBot
             );
 
             // =========================================
-            // استقبال جميع رسائل WOLF
+            // استقبال رسائل WOLF
             // =========================================
 
             _client.Messaging.OnMessage += async (client, message) =>
@@ -84,16 +84,7 @@ namespace BalloonBot
                         "🔥🔥🔥 END MESSAGE 🔥🔥🔥"
                     );
 
-                    // اختبار فقط
-                    if (content.Equals(
-                        "!بالونات",
-                        StringComparison.OrdinalIgnoreCase))
-                    {
-                        await client.SendMessage(
-                            message.GroupId,
-                            "🎈 BalloonBot يستلم الرسائل بنجاح!"
-                        );
-                    }
+                    await Task.CompletedTask;
                 }
                 catch (Exception ex)
                 {
@@ -104,7 +95,7 @@ namespace BalloonBot
             };
 
             // =========================================
-            // الاتصال
+            // الاتصال بـ WOLF
             // =========================================
 
             await _client.Connect();
