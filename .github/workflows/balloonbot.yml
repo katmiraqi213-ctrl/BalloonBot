@@ -1,29 +1,19 @@
-name: BalloonBot
+      - name: Check Secrets
+        env:
+          WOLF_EMAIL_BALLOON: ${{ secrets.WOLF_EMAIL_BALLOON }}
+          WOLF_PASSWORD_BALLOON: ${{ secrets.WOLF_PASSWORD_BALLOON }}
+        run: |
+          if [ -z "$WOLF_EMAIL_BALLOON" ]; then
+            echo "❌ WOLF_EMAIL_BALLOON غير موجود"
+          else
+            echo "✅ WOLF_EMAIL_BALLOON موجود"
+          fi
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-
-jobs:
-  run-bot:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Restore
-        run: dotnet restore BalloonBot.csproj
-
-      - name: Build
-        run: dotnet build BalloonBot.csproj --configuration Release --no-restore
+          if [ -z "$WOLF_PASSWORD_BALLOON" ]; then
+            echo "❌ WOLF_PASSWORD_BALLOON غير موجود"
+          else
+            echo "✅ WOLF_PASSWORD_BALLOON موجود"
+          fi
 
       - name: Run BalloonBot
         env:
