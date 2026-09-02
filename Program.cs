@@ -32,26 +32,10 @@ namespace BalloonBot
 
             _client = new WolfClient();
 
-            Console.WriteLine("🔐 جاري تسجيل الدخول إلى Wolf...");
-
-            bool loginResult =
-                await _client.Login(email, password);
-
-            if (!loginResult)
-            {
-                Console.WriteLine(
-                    "❌ فشل تسجيل الدخول إلى Wolf."
-                );
-
-                return;
-            }
-
-            Console.WriteLine(
-                "✅ تم تسجيل الدخول بنجاح."
-            );
-
             // =========================================
-            // استقبال رسائل WOLF
+            // مهم جدًا:
+            // تسجيل استقبال الرسائل قبل Login
+            // نفس طريقة MazajBot العامل
             // =========================================
 
             _client.Messaging.OnMessage += async (client, message) =>
@@ -61,11 +45,11 @@ namespace BalloonBot
                     Console.WriteLine("");
                     Console.WriteLine("🔥🔥🔥 MESSAGE RECEIVED 🔥🔥🔥");
 
-                    string content =
+                    string text =
                         message.Content?.Trim() ?? "";
 
                     Console.WriteLine(
-                        "📩 Content: " + content
+                        "📩 Content: " + text
                     );
 
                     Console.WriteLine(
@@ -89,13 +73,37 @@ namespace BalloonBot
                 catch (Exception ex)
                 {
                     Console.WriteLine(
-                        "❌ MESSAGE ERROR: " + ex
+                        "❌ MESSAGE ERROR: " + ex.Message
                     );
                 }
             };
 
             // =========================================
-            // الاتصال بـ WOLF
+            // تسجيل الدخول
+            // =========================================
+
+            Console.WriteLine(
+                "🔐 جاري تسجيل الدخول إلى Wolf..."
+            );
+
+            bool loginResult =
+                await _client.Login(email, password);
+
+            if (!loginResult)
+            {
+                Console.WriteLine(
+                    "❌ فشل تسجيل الدخول إلى Wolf."
+                );
+
+                return;
+            }
+
+            Console.WriteLine(
+                "✅ تم تسجيل الدخول إلى Wolf."
+            );
+
+            // =========================================
+            // الاتصال
             // =========================================
 
             await _client.Connect();
@@ -105,7 +113,7 @@ namespace BalloonBot
             );
 
             Console.WriteLine(
-                "📡 البوت ينتظر أوامر WOLF..."
+                "📡 البوت ينتظر رسائل WOLF..."
             );
 
             await Task.Delay(
