@@ -27,20 +27,11 @@ jobs:
 
       - name: Check Secrets
         env:
-          WOLF_EMAIL_BALLOON: ${{ secrets.WOLF_EMAIL_BALLOON }}
-          WOLF_PASSWORD_BALLOON: ${{ secrets.WOLF_PASSWORD_BALLOON }}
+          EMAIL: ${{ secrets.WOLF_EMAIL_BALLOON }}
+          PASSWORD: ${{ secrets.WOLF_PASSWORD_BALLOON }}
         run: |
-          if [ -z "$WOLF_EMAIL_BALLOON" ]; then
-            echo "❌ WOLF_EMAIL_BALLOON غير موجود"
-          else
-            echo "✅ WOLF_EMAIL_BALLOON موجود"
-          fi
-
-          if [ -z "$WOLF_PASSWORD_BALLOON" ]; then
-            echo "❌ WOLF_PASSWORD_BALLOON غير موجود"
-          else
-            echo "✅ WOLF_PASSWORD_BALLOON موجود"
-          fi
+          echo "Email length: ${#EMAIL}"
+          echo "Password length: ${#PASSWORD}"
 
       - name: Run BalloonBot
         env:
