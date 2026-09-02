@@ -12,113 +12,144 @@ namespace BalloonBot
 
         public static async Task Main(string[] args)
         {
+            Console.WriteLine("=================================");
+            Console.WriteLine("🎈 BalloonBot DIAGNOSTIC");
+            Console.WriteLine("=================================");
+
             string email =
                 Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
 
             string password =
                 Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
-            if (string.IsNullOrWhiteSpace(email) ||
-                string.IsNullOrWhiteSpace(password))
+            if (string.IsNullOrWhiteSpace(email))
             {
-                Console.WriteLine(
-                    "❌ WOLF_EMAIL أو WOLF_PASSWORD غير موجود."
-                );
-
+                Console.WriteLine("❌ WOLF_EMAIL غير موجود.");
                 return;
             }
 
-            Console.WriteLine("🎈 تشغيل BalloonBot...");
-
-            _client = new WolfClient();
-
-            // =========================================
-            // مهم جدًا:
-            // تسجيل استقبال الرسائل قبل Login
-            // نفس طريقة MazajBot العامل
-            // =========================================
-
-            _client.Messaging.OnMessage += async (client, message) =>
+            if (string.IsNullOrWhiteSpace(password))
             {
-                try
-                {
-                    Console.WriteLine("");
-                    Console.WriteLine("🔥🔥🔥 MESSAGE RECEIVED 🔥🔥🔥");
-
-                    string text =
-                        message.Content?.Trim() ?? "";
-
-                    Console.WriteLine(
-                        "📩 Content: " + text
-                    );
-
-                    Console.WriteLine(
-                        "👤 UserId: " + message.UserId
-                    );
-
-                    Console.WriteLine(
-                        "👥 GroupId: " + message.GroupId
-                    );
-
-                    Console.WriteLine(
-                        "🆔 MessageId: " + message.MessageId
-                    );
-
-                    Console.WriteLine(
-                        "🔥🔥🔥 END MESSAGE 🔥🔥🔥"
-                    );
-
-                    await Task.CompletedTask;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(
-                        "❌ MESSAGE ERROR: " + ex.Message
-                    );
-                }
-            };
-
-            // =========================================
-            // تسجيل الدخول
-            // =========================================
-
-            Console.WriteLine(
-                "🔐 جاري تسجيل الدخول إلى Wolf..."
-            );
-
-            bool loginResult =
-                await _client.Login(email, password);
-
-            if (!loginResult)
-            {
-                Console.WriteLine(
-                    "❌ فشل تسجيل الدخول إلى Wolf."
-                );
-
+                Console.WriteLine("❌ WOLF_PASSWORD غير موجود.");
                 return;
             }
 
-            Console.WriteLine(
-                "✅ تم تسجيل الدخول إلى Wolf."
-            );
+            Console.WriteLine("✅ WOLF_EMAIL موجود.");
+            Console.WriteLine("✅ WOLF_PASSWORD موجود.");
 
-            // =========================================
-            // الاتصال
-            // =========================================
+            try
+            {
+                Console.WriteLine("🔧 إنشاء WolfClient...");
 
-            await _client.Connect();
+                _client = new WolfClient();
 
-            Console.WriteLine(
-                "🟢 BalloonBot يعمل الآن."
-            );
+                Console.WriteLine("✅ تم إنشاء WolfClient.");
 
-            Console.WriteLine(
-                "📡 البوت ينتظر رسائل WOLF..."
-            );
+                // استقبال الرسائل
+                _client.Messaging.OnMessage += async (client, message) =>
+                {
+                    try
+                    {
+                        Console.WriteLine("");
+                        Console.WriteLine("=================================");
+                        Console.WriteLine("🔥🔥🔥 MESSAGE RECEIVED 🔥🔥🔥");
+                        Console.WriteLine("=================================");
 
-            await Task.Delay(
-                Timeout.Infinite
-            );
+                        Console.WriteLine(
+                            "📩 Content: " +
+                            (message.Content ?? "(فارغ)")
+                        );
+
+                        Console.WriteLine(
+                            "👤 UserId: " +
+                            message.UserId
+                        );
+
+                        Console.WriteLine(
+                            "👥 GroupId: " +
+                            message.GroupId
+                        );
+
+                        Console.WriteLine(
+                            "🆔 MessageId: " +
+                            message.MessageId
+                        );
+
+                        Console.WriteLine("=================================");
+
+                        await Task.CompletedTask;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(
+                            "❌ خطأ داخل OnMessage: " +
+                            ex
+                        );
+                    }
+                };
+
+                Console.WriteLine("✅ تم تسجيل OnMessage.");
+                Console.WriteLine("🔐 جاري تسجيل الدخول...");
+
+                bool loginResult =
+                    await _client.Login(email, password);
+
+                Console.WriteLine(
+                    "📌 نتيجة Login = " +
+                    loginResult
+                );
+
+                if (!loginResult)
+                {
+                    Console.WriteLine(
+                        "❌ فشل تسجيل الدخول."
+                    );
+
+                    return;
+                }
+
+                Console.WriteLine(
+                    "✅ تم تسجيل الدخول بنجاح."
+                );
+
+                Console.WriteLine(
+                    "🔌 جاري تنفيذ Connect..."
+                );
+
+                await _client.Connect();
+
+                Console.WriteLine(
+                    "✅ Connect انتهى بدون Exception."
+                );
+
+                Console.WriteLine("");
+                Console.WriteLine(
+                    "🟢 BalloonBot يعمل."
+                );
+
+                Console.WriteLine(
+                    "📡 الآن انتظر رسالة من الروم..."
+                );
+
+                Console.WriteLine(
+                    "🧪 أرسل: اختبار 123"
+                );
+
+                Console.WriteLine("");
+
+                await Task.Delay(
+                    Timeout.Infinite
+                );
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("");
+                Console.WriteLine("=================================");
+                Console.WriteLine("❌ EXCEPTION");
+                Console.WriteLine("=================================");
+                Console.WriteLine(ex.ToString());
+                Console.WriteLine("=================================");
+            }
         }
     }
 }
