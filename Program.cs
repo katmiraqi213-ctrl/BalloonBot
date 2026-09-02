@@ -19,16 +19,19 @@ namespace BalloonBot
         {
             Console.WriteLine("🎈 Balloon Bot starting...");
 
-            string? email = Environment.GetEnvironmentVariable("WOLF_EMAIL_BALLOON");
-            string? password = Environment.GetEnvironmentVariable("WOLF_PASSWORD_BALLOON");
+            string? email =
+                Environment.GetEnvironmentVariable("WOLF_EMAIL");
+
+            string? password =
+                Environment.GetEnvironmentVariable("WOLF_PASSWORD");
 
             if (string.IsNullOrWhiteSpace(email) ||
                 string.IsNullOrWhiteSpace(password))
             {
-                Console.WriteLine("❌ لم يتم العثور على بيانات حساب WOLF الثاني.");
-                Console.WriteLine("ضع:");
-                Console.WriteLine("WOLF_EMAIL_BALLOON");
-                Console.WriteLine("WOLF_PASSWORD_BALLOON");
+                Console.WriteLine("❌ لم يتم العثور على بيانات حساب WOLF.");
+                Console.WriteLine("يجب توفير:");
+                Console.WriteLine("WOLF_EMAIL");
+                Console.WriteLine("WOLF_PASSWORD");
                 return;
             }
 
@@ -54,17 +57,16 @@ namespace BalloonBot
                     }
 
                     string text = message.Content.Trim();
-                    string userId = message.UserId;
                     string groupId = message.GroupId;
 
-                    // أوامر اللعبة
-                    if (text.StartsWith("!بالونات", StringComparison.OrdinalIgnoreCase))
+                    if (text.StartsWith(
+                        "!بالونات",
+                        StringComparison.OrdinalIgnoreCase))
                     {
                         await HandleCommand(client, message, text);
                         return;
                     }
 
-                    // الأرقام تستخدم فقط أثناء دور اللاعب الحالي
                     if (int.TryParse(text, out int number))
                     {
                         if (_game == null || !_game.Started)
@@ -78,7 +80,8 @@ namespace BalloonBot
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"❌ Message error: {ex.Message}");
+                    Console.WriteLine(
+                        $"❌ Message error: {ex.Message}");
                 }
             };
 
@@ -97,7 +100,8 @@ namespace BalloonBot
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ فشل تشغيل البوت: {ex.Message}");
+                Console.WriteLine(
+                    $"❌ فشل تشغيل البوت: {ex.Message}");
             }
 
             await Task.Delay(-1);
@@ -117,9 +121,6 @@ namespace BalloonBot
                     ? parts[1].ToLowerInvariant()
                     : "مساعدة";
 
-            string groupId = message.GroupId;
-            string userId = message.UserId;
-
             switch (command)
             {
                 case "مساعدة":
@@ -137,7 +138,6 @@ namespace BalloonBot
                         "2️⃣ بعدها أرسل رقم البالونة\n\n" +
                         "كل لاعب يبدأ بـ 7 🎈\n" +
                         "آخر لاعب يبقى هو الفائز 🏆");
-
                     break;
 
                 case "جديد":
@@ -200,7 +200,7 @@ namespace BalloonBot
                 "أرسل:\n" +
                 "!بالونات انضم\n" +
                 "حتى ينضم اللاعبون.\n\n" +
-                "بعدها صاحب اللعبة يرسل:\n" +
+                "بعدها أرسل:\n" +
                 "!بالونات بدء");
         }
 
@@ -225,7 +225,8 @@ namespace BalloonBot
                 return;
             }
 
-            if (_game.Players.Any(p => p.UserId == message.UserId))
+            if (_game.Players.Any(
+                p => p.UserId == message.UserId))
             {
                 await client.Reply(
                     message,
@@ -233,10 +234,14 @@ namespace BalloonBot
                 return;
             }
 
-            int number = _game.Players.Count + 1;
+            int number =
+                _game.Players.Count + 1;
 
             BalloonPlayer player =
-                await CreatePlayer(client, message, number);
+                await CreatePlayer(
+                    client,
+                    message,
+                    number);
 
             _game.Players.Add(player);
 
@@ -257,7 +262,8 @@ namespace BalloonBot
 
             try
             {
-                var user = await client.GetUser(message.UserId);
+                var user =
+                    await client.GetUser(message.UserId);
 
                 if (user != null &&
                     !string.IsNullOrWhiteSpace(user.Nickname))
@@ -275,7 +281,8 @@ namespace BalloonBot
                 UserId = message.UserId,
                 Nickname = nickname,
                 PlayerNumber = number,
-                ActiveBalloons = Enumerable.Range(1, 7).ToList()
+                ActiveBalloons =
+                    Enumerable.Range(1, 7).ToList()
             };
         }
 
@@ -291,17 +298,22 @@ namespace BalloonBot
                 return;
             }
 
-            string result = "🎈 لاعبين لعبة البالونات 🎈\n\n";
+            string result =
+                "🎈 لاعبين لعبة البالونات 🎈\n\n";
 
             foreach (var player in _game.Players)
             {
                 string status;
 
                 if (player.Eliminated)
+                {
                     status = "❌ خرج";
+                }
                 else
+                {
                     status =
                         $"{player.ActiveBalloons.Count} 🎈";
+                }
 
                 result +=
                     $"{player.PlayerNumber}️⃣ " +
@@ -316,7 +328,9 @@ namespace BalloonBot
                     _game.CurrentPlayer.Nickname;
             }
 
-            await client.Reply(message, result);
+            await client.Reply(
+                message,
+                result);
         }
 
         private static async Task StartGame(
@@ -351,7 +365,9 @@ namespace BalloonBot
             _game.Started = true;
             _game.CurrentIndex = 0;
 
-            await SendGameBoard(client, message.GroupId);
+            await SendGameBoard(
+                client,
+                message.GroupId);
 
             await AskForOpponent(client);
         }
@@ -386,7 +402,9 @@ namespace BalloonBot
             text +=
                 "\n💡 كل لاعب لديه 7 بالونات عند البداية.";
 
-            await client.GroupMessage(groupId, text);
+            await client.GroupMessage(
+                groupId,
+                text);
         }
 
         private static async Task HandleNumber(
@@ -412,14 +430,19 @@ namespace BalloonBot
 
             if (_game.WaitingForOpponent)
             {
-                await ChooseOpponent(client, message, number);
+                await ChooseOpponent(
+                    client,
+                    message,
+                    number);
                 return;
             }
 
             if (_game.WaitingForBalloon)
             {
-                await ChooseBalloon(client, message, number);
-                return;
+                await ChooseBalloon(
+                    client,
+                    message,
+                    number);
             }
         }
 
@@ -434,15 +457,15 @@ namespace BalloonBot
 
             BalloonPlayer? opponent =
                 _game.Players.FirstOrDefault(
-                    p => p.PlayerNumber == number &&
-                         !p.Eliminated);
+                    p =>
+                        p.PlayerNumber == number &&
+                        !p.Eliminated);
 
             if (opponent == null)
             {
                 await client.Reply(
                     message,
-                    "❌ رقم اللاعب غير صحيح أو اللاعب خرج من اللعبة.\n" +
-                    "اختر رقم لاعب موجود.");
+                    "❌ رقم اللاعب غير صحيح أو اللاعب خرج من اللعبة.");
                 return;
             }
 
@@ -487,7 +510,8 @@ namespace BalloonBot
             BalloonPlayer opponent =
                 _game.SelectedOpponent;
 
-            if (!opponent.ActiveBalloons.Contains(balloonNumber))
+            if (!opponent.ActiveBalloons
+                .Contains(balloonNumber))
             {
                 await client.Reply(
                     message,
@@ -498,14 +522,15 @@ namespace BalloonBot
 
             _game.WaitingForBalloon = false;
 
-            int outcome = Random.Shared.Next(1, 101);
+            int outcome =
+                Random.Shared.Next(1, 101);
 
             string result;
 
             if (outcome <= 55)
             {
-                // انفجار عادي
-                opponent.ActiveBalloons.Remove(balloonNumber);
+                opponent.ActiveBalloons
+                    .Remove(balloonNumber);
 
                 result =
                     $"💥 طاخ! البالونة رقم {balloonNumber} انفجرت!\n" +
@@ -514,7 +539,6 @@ namespace BalloonBot
             }
             else if (outcome <= 70)
             {
-                // حظ
                 result =
                     $"🍀 حظك قوي!\n" +
                     $"البالونة رقم {balloonNumber} ما انطكت 😎\n" +
@@ -522,23 +546,22 @@ namespace BalloonBot
             }
             else if (outcome <= 85)
             {
-                // نجاة
                 result =
                     $"🛡️ نجت البالونة!\n" +
                     $"البالونة رقم {balloonNumber} بقيت سالمة.\n" +
-                    $"🎈 الدور راح ينتقل للاعب التالي.";
+                    "🎈 الدور راح ينتقل للاعب التالي.";
             }
             else if (outcome <= 95)
             {
-                // دور إضافي
-                opponent.ActiveBalloons.Remove(balloonNumber);
+                opponent.ActiveBalloons
+                    .Remove(balloonNumber);
 
                 result =
                     $"💥 انفجرت البالونة!\n" +
                     $"🎈 {opponent.Nickname} صار عنده " +
                     $"{opponent.ActiveBalloons.Count} بالونات.\n\n" +
                     "🔄 مفاجأة! حصلت على دور إضافي!";
-                
+
                 await client.GroupMessage(
                     message.GroupId,
                     result);
@@ -563,25 +586,25 @@ namespace BalloonBot
             }
             else
             {
-                // عشوائي
                 bool pop =
                     Random.Shared.Next(0, 2) == 1;
 
                 if (pop)
                 {
-                    opponent.ActiveBalloons.Remove(balloonNumber);
+                    opponent.ActiveBalloons
+                        .Remove(balloonNumber);
 
                     result =
                         $"🎲 الحظ العشوائي قرر...\n" +
-                        $"💥 انفجرت البالونة!\n" +
+                        "💥 انفجرت البالونة!\n" +
                         $"🎈 بقي لـ {opponent.Nickname}: " +
                         $"{opponent.ActiveBalloons.Count}";
                 }
                 else
                 {
                     result =
-                        $"🎲 الحظ العشوائي قرر...\n" +
-                        $"🍀 البالونة نجت!\n" +
+                        "🎲 الحظ العشوائي قرر...\n" +
+                        "🍀 البالونة نجت!\n" +
                         "ما انطكت.";
                 }
             }
@@ -590,7 +613,6 @@ namespace BalloonBot
                 message.GroupId,
                 result);
 
-            // إذا اللاعب صار عنده صفر بالونات
             if (opponent.ActiveBalloons.Count == 0)
             {
                 opponent.Eliminated = true;
@@ -605,7 +627,6 @@ namespace BalloonBot
 
             _game.SelectedOpponent = null;
 
-            // الانتقال للاعب التالي
             MoveToNextPlayer();
 
             await SendGameBoard(
@@ -631,9 +652,7 @@ namespace BalloonBot
                     _game.Players[_game.CurrentIndex];
 
                 if (!next.Eliminated)
-                {
                     return;
-                }
             }
         }
 
@@ -651,18 +670,20 @@ namespace BalloonBot
                 string.Join(
                     "\n",
                     _game.Players
-                        .Where(p =>
-                            !p.Eliminated &&
-                            p.UserId !=
-                            _game.CurrentPlayer!.UserId)
-                        .Select(p =>
-                            $"{p.PlayerNumber}️⃣ " +
-                            $"{p.Nickname} — " +
-                            $"{p.ActiveBalloons.Count} 🎈"));
+                        .Where(
+                            p =>
+                                !p.Eliminated &&
+                                p.UserId !=
+                                _game.CurrentPlayer!.UserId)
+                        .Select(
+                            p =>
+                                $"{p.PlayerNumber}️⃣ " +
+                                $"{p.Nickname} — " +
+                                $"{p.ActiveBalloons.Count} 🎈"));
 
             await client.GroupMessage(
                 _game.GroupId,
-                $"🎯 دور { _game.CurrentPlayer.Nickname }\n\n" +
+                $"🎯 دور {_game.CurrentPlayer.Nickname}\n\n" +
                 "اختار الخصم بإرسال رقمه:\n\n" +
                 players);
         }
