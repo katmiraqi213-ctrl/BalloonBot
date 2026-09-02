@@ -24,7 +24,6 @@ namespace BalloonBot
                 Console.WriteLine(
                     "❌ WOLF_EMAIL أو WOLF_PASSWORD غير موجود."
                 );
-
                 return;
             }
 
@@ -32,24 +31,15 @@ namespace BalloonBot
 
             _client = new WolfClient();
 
-            // =========================================
-            // تسجيل الدخول أولاً
-            // نفس MazajBot العامل بالضبط
-            // =========================================
+            Console.WriteLine("🔐 جاري تسجيل الدخول إلى Wolf...");
 
-            Console.WriteLine(
-                "🔐 جاري تسجيل الدخول إلى Wolf..."
-            );
-
-            bool loginResult =
-                await _client.Login(email, password);
+            bool loginResult = await _client.Login(email, password);
 
             if (!loginResult)
             {
                 Console.WriteLine(
                     "❌ فشل تسجيل الدخول إلى Wolf."
                 );
-
                 return;
             }
 
@@ -57,27 +47,15 @@ namespace BalloonBot
                 "✅ تم تسجيل الدخول بنجاح."
             );
 
-            // =========================================
-            // تسجيل استقبال الرسائل
-            // بعد Login مثل MazajBot
-            // =========================================
+            // نفس ترتيب MazajBot بالضبط:
+            // Login → OnMessage → Connect
 
             _client.Messaging.OnMessage += async (client, message) =>
             {
                 try
                 {
                     Console.WriteLine("");
-                    Console.WriteLine(
-                        "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥"
-                    );
-
-                    Console.WriteLine(
-                        "📩 BALLOON MESSAGE RECEIVED"
-                    );
-
-                    Console.WriteLine(
-                        "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥"
-                    );
+                    Console.WriteLine("🔥🔥🔥 MESSAGE RECEIVED 🔥🔥🔥");
 
                     string text =
                         message.Content?.Trim() ?? "";
@@ -102,7 +80,15 @@ namespace BalloonBot
                         "================================="
                     );
 
-                    await Task.CompletedTask;
+                    // اختبار فقط:
+                    // إذا وصلت الرسالة للبوت، يرد عليها.
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        await client.Messaging.SendMessage(
+                            message.GroupId,
+                            "🎈 وصلتني رسالتك: " + text
+                        );
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -120,14 +106,6 @@ namespace BalloonBot
                 "✅ تم تسجيل OnMessage."
             );
 
-            // =========================================
-            // Connect
-            // =========================================
-
-            Console.WriteLine(
-                "🔌 جاري الاتصال بـ WOLF..."
-            );
-
             await _client.Connect();
 
             Console.WriteLine(
@@ -136,10 +114,6 @@ namespace BalloonBot
 
             Console.WriteLine(
                 "📡 البوت ينتظر رسائل WOLF..."
-            );
-
-            Console.WriteLine(
-                "🧪 أرسل داخل الروم: 123"
             );
 
             await Task.Delay(
