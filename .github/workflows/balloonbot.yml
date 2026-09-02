@@ -1,0 +1,32 @@
+name: BalloonBot
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore BalloonBot.csproj
+
+      - name: Build
+        run: dotnet build BalloonBot.csproj --configuration Release --no-restore
+
+      - name: Run BalloonBot
+        env:
+          WOLF_EMAIL_BALLOON: ${{ secrets.WOLF_EMAIL_BALLOON }}
+          WOLF_PASSWORD_BALLOON: ${{ secrets.WOLF_PASSWORD_BALLOON }}
+        run: dotnet run --project BalloonBot.csproj --configuration Release --no-build
