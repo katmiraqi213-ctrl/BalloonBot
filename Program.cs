@@ -24,6 +24,7 @@ namespace BalloonBot
                 Console.WriteLine(
                     "❌ WOLF_EMAIL أو WOLF_PASSWORD غير موجود."
                 );
+
                 return;
             }
 
@@ -37,19 +38,13 @@ namespace BalloonBot
 
             if (!loginResult)
             {
-                Console.WriteLine(
-                    "❌ فشل تسجيل الدخول إلى Wolf."
-                );
+                Console.WriteLine("❌ فشل تسجيل الدخول إلى Wolf.");
                 return;
             }
 
-            Console.WriteLine(
-                "✅ تم تسجيل الدخول بنجاح."
-            );
+            Console.WriteLine("✅ تم تسجيل الدخول بنجاح.");
 
-            // نفس ترتيب MazajBot بالضبط:
-            // Login → OnMessage → Connect
-
+            // تسجيل استقبال الرسائل
             _client.Messaging.OnMessage += async (client, message) =>
             {
                 try
@@ -60,65 +55,32 @@ namespace BalloonBot
                     string text =
                         message.Content?.Trim() ?? "";
 
-                    Console.WriteLine(
-                        "📩 Content: " + text
-                    );
+                    Console.WriteLine("📩 Content: " + text);
+                    Console.WriteLine("👤 UserId: " + message.UserId);
+                    Console.WriteLine("👥 GroupId: " + message.GroupId);
+                    Console.WriteLine("🆔 MessageId: " + message.MessageId);
 
-                    Console.WriteLine(
-                        "👤 UserId: " + message.UserId
-                    );
+                    Console.WriteLine("=================================");
 
-                    Console.WriteLine(
-                        "👥 GroupId: " + message.GroupId
-                    );
-
-                    Console.WriteLine(
-                        "🆔 MessageId: " + message.MessageId
-                    );
-
-                    Console.WriteLine(
-                        "================================="
-                    );
-
-                    // اختبار فقط:
-                    // إذا وصلت الرسالة للبوت، يرد عليها.
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        await client.Messaging.SendMessage(
-                            message.GroupId,
-                            "🎈 وصلتني رسالتك: " + text
-                        );
-                    }
+                    await Task.CompletedTask;
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(
-                        "❌ MESSAGE ERROR:"
-                    );
-
-                    Console.WriteLine(
-                        ex.ToString()
-                    );
+                    Console.WriteLine("❌ MESSAGE ERROR:");
+                    Console.WriteLine(ex.ToString());
                 }
             };
 
-            Console.WriteLine(
-                "✅ تم تسجيل OnMessage."
-            );
+            Console.WriteLine("✅ تم تسجيل OnMessage.");
 
+            // نفس طريقة MazajBot
             await _client.Connect();
 
-            Console.WriteLine(
-                "🟢 BalloonBot يعمل الآن."
-            );
+            Console.WriteLine("🟢 BalloonBot يعمل الآن.");
+            Console.WriteLine("📡 البوت ينتظر رسائل WOLF...");
+            Console.WriteLine("🧪 أرسل داخل الروم: 123");
 
-            Console.WriteLine(
-                "📡 البوت ينتظر رسائل WOLF..."
-            );
-
-            await Task.Delay(
-                Timeout.Infinite
-            );
+            await Task.Delay(Timeout.Infinite);
         }
     }
 }
