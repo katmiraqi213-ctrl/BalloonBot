@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using WolfLive.Api;
 using WolfLive.Api.Models;
@@ -26,7 +27,6 @@ namespace BalloonBot
 
             IWolfClient client = new WolfClient();
 
-            // استقبال الرسائل قبل تسجيل الدخول
             client.Messaging.OnMessage += async (c, message) =>
             {
                 try
@@ -34,34 +34,36 @@ namespace BalloonBot
                     string text = message.Content?.Trim() ?? "";
 
                     Console.WriteLine("");
-                    Console.WriteLine("🔥🔥🔥 MESSAGE RECEIVED 🔥🔥🔥");
-                    Console.WriteLine("📩 الرسالة: " + text);
-                    Console.WriteLine("👤 UserId: " + message.UserId);
-                    Console.WriteLine("🏠 GroupId: " + message.GroupId);
-                    Console.WriteLine("🆔 MessageId: " + message.MessageId);
+                    Console.WriteLine("════════════════════════════");
+                    Console.WriteLine("🔥 MESSAGE FROM WOLF");
+                    Console.WriteLine("📩 CONTENT = [" + text + "]");
+                    Console.WriteLine("👤 USER = " + message.UserId);
+                    Console.WriteLine("🏠 GROUP = " + message.GroupId);
+                    Console.WriteLine("🆔 MESSAGE = " + message.MessageId);
+                    Console.WriteLine("════════════════════════════");
 
-                    // اختبار الأمر
-                    if (text == "!بالونات")
+                    // نقبل الأمر حتى لو كان بيه مسافات
+                    if (text.StartsWith(
+                        "!بالونات",
+                        StringComparison.OrdinalIgnoreCase))
                     {
-                        Console.WriteLine("🎈 تم اكتشاف أمر البالونات");
+                        Console.WriteLine("🎈🎈🎈 BALLOON COMMAND DETECTED 🎈🎈🎈");
 
                         await c.Reply(
                             message,
-                            "🎈 بوت البالونات شغال!\n" +
-                            "اكتب !بالونات مساعدة"
+                            "🎈 تم استلام أمر البالونات من هذا الروم!"
                         );
+
+                        Console.WriteLine("✅ REPLY SENT");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(
-                        "❌ MESSAGE ERROR: " + ex
-                    );
+                    Console.WriteLine("❌ ERROR = " + ex);
                 }
             };
 
             Console.WriteLine("✅ OnMessage registered");
-
             Console.WriteLine("🔐 Login...");
 
             bool login = await client.Login(email, password);
@@ -75,10 +77,9 @@ namespace BalloonBot
             }
 
             Console.WriteLine("✅ Login OK");
-            Console.WriteLine("🟢 الاتصال تم بواسطة Login");
-            Console.WriteLine("📡 BalloonBot ينتظر رسائل الروم...");
+            Console.WriteLine("🟢 CONNECTED");
+            Console.WriteLine("📡 WAITING FOR ROOM MESSAGES...");
 
-            // مهم: لا نستدعي Connect() مرة ثانية
             await Task.Delay(Timeout.Infinite);
         }
     }
