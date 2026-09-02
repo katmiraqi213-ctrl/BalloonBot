@@ -49,13 +49,12 @@ class Program
             }
             catch (Exception ex)
             {
-                Console.WriteLine(
-                    "❌ COMMAND ERROR: " + ex.Message
-                );
+                Console.WriteLine("❌ COMMAND ERROR: " + ex.Message);
             }
         };
 
-        bool login = _client.Login(email, password);
+        // مهم جداً: Login ترجع Task<bool>
+        bool login = await _client.Login(email, password);
 
         if (!login)
         {
@@ -81,7 +80,7 @@ class Program
         string groupId = message.GroupId ?? "";
 
         // =========================
-        // أوامر البوت
+        // المساعدة
         // =========================
 
         if (text.Equals("!بالونات", StringComparison.OrdinalIgnoreCase) ||
@@ -90,6 +89,10 @@ class Program
             await Reply(client, message, HelpText());
             return;
         }
+
+        // =========================
+        // إنشاء لعبة
+        // =========================
 
         if (text.Equals("!بالونات جديد", StringComparison.OrdinalIgnoreCase))
         {
@@ -114,16 +117,19 @@ class Program
                 client,
                 message,
                 "🎈 تم إنشاء لعبة البالونات!\n\n" +
-                "👤 اللاعب الذي أنشأ اللعبة:\n" +
-                $"{nickname} — 7 🎈\n\n" +
+                $"👤 منشئ اللعبة:\n{nickname} — 7 🎈\n\n" +
                 "👥 لإضافة اللاعبين:\n" +
                 "!بالونات انضم\n\n" +
-                "🎮 بعد اكتمال اللاعبين استخدم:\n" +
+                "🎮 بعد اكتمال اللاعبين:\n" +
                 "!بالونات بدء"
             );
 
             return;
         }
+
+        // =========================
+        // الانضمام
+        // =========================
 
         if (text.Equals("!بالونات انضم", StringComparison.OrdinalIgnoreCase) ||
             text.Equals("!بالونات انضمام", StringComparison.OrdinalIgnoreCase))
@@ -178,6 +184,10 @@ class Program
             return;
         }
 
+        // =========================
+        // عرض اللاعبين
+        // =========================
+
         if (text.Equals("!بالونات لاعبين", StringComparison.OrdinalIgnoreCase))
         {
             if (_game == null)
@@ -202,6 +212,10 @@ class Program
 
             return;
         }
+
+        // =========================
+        // بدء اللعبة
+        // =========================
 
         if (text.Equals("!بالونات بدء", StringComparison.OrdinalIgnoreCase))
         {
@@ -246,7 +260,7 @@ class Program
             await Reply(
                 client,
                 message,
-                "🎈🔥 بدأت لعبة البالونات!\n\n" +
+                "🎈🔥 بدأت لعبة البالونات! 🔥🎈\n\n" +
                 _game.PlayersText() +
                 "\n\n" +
                 $"🎯 الدور الآن على: {_game.CurrentPlayerName}\n\n" +
@@ -255,6 +269,10 @@ class Program
 
             return;
         }
+
+        // =========================
+        // إنهاء اللعبة
+        // =========================
 
         if (text.Equals("!بالونات انهاء", StringComparison.OrdinalIgnoreCase) ||
             text.Equals("!بالونات إنهاء", StringComparison.OrdinalIgnoreCase))
@@ -314,7 +332,7 @@ class Program
                 await Reply(
                     client,
                     message,
-                    "❌ رقم اللاعب غير صحيح.\n" +
+                    "❌ رقم اللاعب غير صحيح.\n\n" +
                     _game.PlayersText()
                 );
 
@@ -359,9 +377,9 @@ class Program
         }
     }
 
-    // =========================
+    // ==================================================
     // تنفيذ ضربة البالون
-    // =========================
+    // ==================================================
 
     private static async Task PlayBalloon(
         IWolfClient client,
@@ -413,7 +431,10 @@ class Program
 
         int random = Random.Shared.Next(1, 101);
 
+        // ==========================================
         // 🍀 حظ
+        // ==========================================
+
         if (random <= 15)
         {
             result =
@@ -428,13 +449,16 @@ class Program
                 $"\n\n➡️ الدور الآن على: {_game.CurrentPlayerName}";
         }
 
+        // ==========================================
         // 🛡️ نجاة
+        // ==========================================
+
         else if (random <= 30)
         {
             result =
                 $"🛡️ نجاة!\n\n" +
                 $"🎈 البالون رقم {balloonNumber} بقي موجوداً.\n" +
-                $"➡️ لكن الدور ينتقل إلى اللاعب التالي.";
+                "➡️ لكن الدور ينتقل إلى اللاعب التالي.";
 
             _game.ResetSelection();
             _game.MoveToNextPlayer();
@@ -443,7 +467,10 @@ class Program
                 $"\n\n➡️ الدور الآن على: {_game.CurrentPlayerName}";
         }
 
+        // ==========================================
         // 🔄 دور إضافي
+        // ==========================================
+
         else if (random <= 40)
         {
             opponent.PopBalloon(balloonNumber);
@@ -489,7 +516,10 @@ class Program
             }
         }
 
+        // ==========================================
         // 💥 ضربة عادية
+        // ==========================================
+
         else
         {
             opponent.PopBalloon(balloonNumber);
@@ -545,9 +575,9 @@ class Program
         );
     }
 
-    // =========================
-    // بدء اللعبة
-    // =========================
+    // ==================================================
+    // المساعدة
+    // ==================================================
 
     private static string HelpText()
     {
@@ -591,9 +621,9 @@ class Program
             "🍀 توجد تأثيرات عشوائية أثناء اللعب.";
     }
 
-    // =========================
+    // ==================================================
     // الحصول على اسم اللاعب
-    // =========================
+    // ==================================================
 
     private static async Task<string> GetNickname(
         IWolfClient client,
@@ -616,9 +646,9 @@ class Program
         return userId;
     }
 
-    // =========================
+    // ==================================================
     // إرسال الرد
-    // =========================
+    // ==================================================
 
     private static async Task Reply(
         IWolfClient client,
@@ -711,11 +741,12 @@ class BalloonGame
 
         WaitingForOpponent = false;
         WaitingForBalloon = false;
+        SelectedOpponentId = null;
     }
 
-    // =========================
+    // ==================================================
     // إضافة لاعب
-    // =========================
+    // ==================================================
 
     public void AddPlayer(
         string userId,
@@ -732,9 +763,9 @@ class BalloonGame
         );
     }
 
-    // =========================
+    // ==================================================
     // هل اللاعب موجود؟
-    // =========================
+    // ==================================================
 
     public bool HasPlayer(string userId)
     {
@@ -743,18 +774,18 @@ class BalloonGame
         );
     }
 
-    // =========================
+    // ==================================================
     // اللاعبين الأحياء
-    // =========================
+    // ==================================================
 
     public List<BalloonPlayer> AlivePlayers =>
         Players
             .Where(x => !x.Eliminated)
             .ToList();
 
-    // =========================
+    // ==================================================
     // بدء اللعبة
-    // =========================
+    // ==================================================
 
     public void StartGame()
     {
@@ -768,18 +799,16 @@ class BalloonGame
         SelectedOpponentId = null;
     }
 
-    // =========================
+    // ==================================================
     // اللاعب الحالي
-    // =========================
+    // ==================================================
 
     public BalloonPlayer? GetCurrentPlayer()
     {
         if (string.IsNullOrWhiteSpace(CurrentPlayerId))
             return null;
 
-        return GetPlayerById(
-            CurrentPlayerId
-        );
+        return GetPlayerById(CurrentPlayerId);
     }
 
     public string CurrentPlayerName
@@ -791,9 +820,9 @@ class BalloonGame
         }
     }
 
-    // =========================
+    // ==================================================
     // التحقق من الدور
-    // =========================
+    // ==================================================
 
     public bool IsCurrentPlayer(
         string userId)
@@ -801,9 +830,9 @@ class BalloonGame
         return CurrentPlayerId == userId;
     }
 
-    // =========================
+    // ==================================================
     // الحصول على لاعب بواسطة ID
-    // =========================
+    // ==================================================
 
     public BalloonPlayer? GetPlayerById(
         string userId)
@@ -813,15 +842,14 @@ class BalloonGame
         );
     }
 
-    // =========================
+    // ==================================================
     // الحصول على لاعب بواسطة الرقم
-    // =========================
+    // ==================================================
 
     public BalloonPlayer? GetPlayerByNumber(
         int number)
     {
-        var alive =
-            AlivePlayers;
+        var alive = AlivePlayers;
 
         if (number < 1 ||
             number > alive.Count)
@@ -832,14 +860,13 @@ class BalloonGame
         return alive[number - 1];
     }
 
-    // =========================
+    // ==================================================
     // الانتقال للاعب التالي
-    // =========================
+    // ==================================================
 
     public void MoveToNextPlayer()
     {
-        var alive =
-            AlivePlayers;
+        var alive = AlivePlayers;
 
         if (alive.Count == 0)
         {
@@ -872,9 +899,9 @@ class BalloonGame
         SelectedOpponentId = null;
     }
 
-    // =========================
+    // ==================================================
     // إعادة حالة الاختيار
-    // =========================
+    // ==================================================
 
     public void ResetSelection()
     {
@@ -883,9 +910,9 @@ class BalloonGame
         SelectedOpponentId = null;
     }
 
-    // =========================
+    // ==================================================
     // الفائز
-    // =========================
+    // ==================================================
 
     public BalloonPlayer? GetWinner()
     {
@@ -894,9 +921,9 @@ class BalloonGame
             : null;
     }
 
-    // =========================
+    // ==================================================
     // عرض اللاعبين
-    // =========================
+    // ==================================================
 
     public string PlayersText()
     {
@@ -933,6 +960,10 @@ class BalloonGame
                 lines
             );
     }
+
+    // ==================================================
+    // أرقام اللاعبين بالإيموجي
+    // ==================================================
 
     private string GetNumberEmoji(
         int number)
