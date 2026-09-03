@@ -1919,61 +1919,89 @@ namespace PenaltyBot
         }
 
         // ============================================================
-        // DRAW RECT
-        // ============================================================
+// DRAW LINE
+// ============================================================
 
-        private static void DrawRect(
-            Image<Rgba32> image,
-            int x,
-            int y,
-            int width,
-            int height,
-            int thickness,
-            Rgba32 color)
+private static void DrawLine(
+    Image<Rgba32> image,
+    int x1,
+    int y1,
+    int x2,
+    int y2,
+    int thickness,
+    Rgba32 color)
+{
+    int dx = x2 - x1;
+    int dy = y2 - y1;
+
+    int steps = Math.Max(
+        Math.Abs(dx),
+        Math.Abs(dy));
+
+    if (steps == 0)
+    {
+        FillCircle(
+            image,
+            x1,
+            y1,
+            Math.Max(1, thickness / 2),
+            color);
+
+        return;
+    }
+
+    double stepX = (double)dx / steps;
+    double stepY = (double)dy / steps;
+
+    double x = x1;
+    double y = y1;
+
+    int radius = Math.Max(1, thickness / 2);
+
+    for (int i = 0; i <= steps; i++)
+    {
+        FillCircle(
+            image,
+            (int)Math.Round(x),
+            (int)Math.Round(y),
+            radius,
+            color);
+
+        x += stepX;
+        y += stepY;
+    }
+}
+
+// ============================================================
+// FILL CIRCLE
+// ============================================================
+
+private static void FillCircle(
+    Image<Rgba32> image,
+    int centerX,
+    int centerY,
+    int radius,
+    Rgba32 color)
+{
+    int radiusSquared = radius * radius;
+
+    int minX = Math.Max(0, centerX - radius);
+    int maxX = Math.Min(image.Width - 1, centerX + radius);
+
+    int minY = Math.Max(0, centerY - radius);
+    int maxY = Math.Min(image.Height - 1, centerY + radius);
+
+    for (int y = minY; y <= maxY; y++)
+    {
+        for (int x = minX; x <= maxX; x++)
         {
-            FillRect(
-                image,
-                x,
-                y,
-                width,
-                thickness,
-                color);
+            int dx = x - centerX;
+            int dy = y - centerY;
 
-            FillRect(
-                image,
-                x,
-                y + height - thickness,
-                width,
-                thickness,
-                color);
-
-            FillRect(
-                image,
-                x,
-                y,
-                thickness,
-                height,
-                color);
-
-            FillRect(
-                image,
-                x + width - thickness,
-                y,
-                thickness,
-                height,
-                color);
+            if (dx * dx + dy * dy <= radiusSquared)
+            {
+                image[x, y] = color;
+            }
         }
-
-        // ============================================================
-        // DRAW LINE
-        // ============================================================
-
-        private static void DrawLine(
-            Image<Rgba32> image,
-            int x1,
-            int y1,
-            int x2,
-            int y2,
-            int thickness,
-            Rgba32 color)
- 
+    }
+}
