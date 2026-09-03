@@ -1921,7 +1921,94 @@ namespace PenaltyBot
         // ============================================================
 // DRAW LINE
 // ============================================================
+private static void DrawRect(
+    Image<Rgba32> image,
+    int x,
+    int y,
+    int width,
+    int height,
+    int thickness,
+    Rgba32 color)
+{
+    // أعلى
+    FillRect(
+        image,
+        x,
+        y,
+        width,
+        thickness,
+        color);
 
+    // أسفل
+    FillRect(
+        image,
+        x,
+        y + height - thickness,
+        width,
+        thickness,
+        color);
+
+    // يسار
+    FillRect(
+        image,
+        x,
+        y,
+        thickness,
+        height,
+        color);
+
+    // يمين
+    FillRect(
+        image,
+        x + width - thickness,
+        y,
+        thickness,
+        height,
+        color);
+}
+
+
+private static void DrawCircle(
+    Image<Rgba32> image,
+    int centerX,
+    int centerY,
+    int radius,
+    int thickness,
+    Rgba32 color)
+{
+    if (thickness < 1)
+        thickness = 1;
+
+    int outerRadius = radius;
+    int innerRadius = Math.Max(0, radius - thickness);
+
+    int outerSquared = outerRadius * outerRadius;
+    int innerSquared = innerRadius * innerRadius;
+
+    int minX = Math.Max(0, centerX - outerRadius);
+    int maxX = Math.Min(image.Width - 1, centerX + outerRadius);
+
+    int minY = Math.Max(0, centerY - outerRadius);
+    int maxY = Math.Min(image.Height - 1, centerY + outerRadius);
+
+    for (int y = minY; y <= maxY; y++)
+    {
+        for (int x = minX; x <= maxX; x++)
+        {
+            int dx = x - centerX;
+            int dy = y - centerY;
+
+            int distanceSquared =
+                dx * dx + dy * dy;
+
+            if (distanceSquared <= outerSquared &&
+                distanceSquared >= innerSquared)
+            {
+                image[x, y] = color;
+            }
+        }
+    }
+}
 private static void DrawLine(
     Image<Rgba32> image,
     int x1,
