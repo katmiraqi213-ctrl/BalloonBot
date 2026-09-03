@@ -9,7 +9,6 @@ using WolfLive.Api;
 using WolfLive.Api.Models;
 
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -117,7 +116,7 @@ namespace PenaltyBot
         {
             try
             {
-                string? groupId =
+                string groupId =
                     GetGroupId(message);
 
                 string text =
@@ -134,7 +133,6 @@ namespace PenaltyBot
                 Console.WriteLine(
                     $"[MESSAGE] Room={groupId} Text={text}");
 
-                // الأرقام أثناء اللعب
                 if (text == "1" ||
                     text == "2" ||
                     text == "3")
@@ -254,7 +252,7 @@ namespace PenaltyBot
 
                 try
                 {
-                    string? groupId =
+                    string groupId =
                         GetGroupId(message);
 
                     if (!string.IsNullOrWhiteSpace(groupId))
@@ -486,7 +484,6 @@ namespace PenaltyBot
                 {
                     game.Started = false;
                     game.CurrentPlayerIndex = -1;
-
                     return;
                 }
 
@@ -591,7 +588,6 @@ namespace PenaltyBot
         {
             PenaltyGame? game;
             string name = "اللاعب";
-            bool shouldContinue = false;
 
             lock (GameLock)
             {
@@ -643,13 +639,9 @@ namespace PenaltyBot
                 }
 
                 if (game.CurrentPlayerIndex < 0)
-                {
                     game.CurrentPlayerIndex = 0;
-                }
 
                 game.TurnCancellation?.Cancel();
-
-                shouldContinue = true;
             }
 
             await Send(
@@ -659,10 +651,7 @@ namespace PenaltyBot
                 "تم استبعاده من اللعبة فقط.\n" +
                 "🚫 لم يتم طرده من الروم.");
 
-            if (shouldContinue)
-            {
-                await StartTurn(groupId);
-            }
+            await StartTurn(groupId);
         }
 
         private static async Task ProcessShot(
@@ -762,7 +751,6 @@ namespace PenaltyBot
                 $"⚽ الأهداف: {player.Goals}\n" +
                 $"🎯 الركلات: {player.Shots}");
 
-            // إنشاء الصورة
             byte[] imageBytes =
                 CreatePenaltyImage(
                     player.Name,
@@ -775,7 +763,6 @@ namespace PenaltyBot
             Console.WriteLine(
                 $"[IMAGE CREATE] JPEG = {imageBytes.Length} bytes");
 
-            // إرسال الصورة
             try
             {
                 var response =
@@ -864,7 +851,6 @@ namespace PenaltyBot
                 {
                     game.Started = false;
                     game.CurrentPlayerIndex = -1;
-
                     return;
                 }
 
@@ -1056,7 +1042,7 @@ namespace PenaltyBot
                     width,
                     height);
 
-            // الخلفية والملعب
+            // الخلفية
             image.Mutate(ctx =>
             {
                 ctx.Fill(
@@ -1064,18 +1050,6 @@ namespace PenaltyBot
                         12,
                         18,
                         30));
-
-                // الملعب
-                ctx.Fill(
-                    Color.FromRgb(
-                        25,
-                        105,
-                        55),
-                    new Rectangle(
-                        0,
-                        390,
-                        width,
-                        260));
 
                 // السماء
                 ctx.Fill(
@@ -1089,6 +1063,18 @@ namespace PenaltyBot
                         width,
                         390));
 
+                // الملعب
+                ctx.Fill(
+                    Color.FromRgb(
+                        25,
+                        105,
+                        55),
+                    new Rectangle(
+                        0,
+                        390,
+                        width,
+                        260));
+
                 // منطقة الجزاء
                 ctx.Draw(
                     Color.White,
@@ -1099,7 +1085,7 @@ namespace PenaltyBot
                         640,
                         250));
 
-                // خط المرمى
+                // المرمى
                 ctx.Draw(
                     Color.White,
                     6,
@@ -1167,7 +1153,7 @@ namespace PenaltyBot
                             y));
                 }
 
-                // مكان الحارس
+                // الحارس
                 float keeperX =
                     keeperDirection == 1
                         ? 330
@@ -1176,13 +1162,12 @@ namespace PenaltyBot
                             : 630;
 
                 // رأس الحارس
-                ctx.Fill(
-                    Color.Red,
-                    new EllipsePolygon(
-                        new PointF(
-                            keeperX,
-                            210),
-                        48));
+                DrawCircle(
+                    image,
+                    (int)keeperX,
+                    210,
+                    48,
+                    Color.Red);
 
                 // جسم الحارس
                 ctx.Fill(
@@ -1234,37 +1219,35 @@ namespace PenaltyBot
                     new PointF(
                         keeperX + 45,
                         390));
-
-                // الكرة
-                float ballX =
-                    shotDirection == 1
-                        ? 320
-                        : shotDirection == 2
-                            ? 500
-                            : 680;
-
-                float ballY =
-                    goal
-                        ? 180
-                        : 285;
-
-                ctx.Fill(
-                    Color.White,
-                    new EllipsePolygon(
-                        new PointF(
-                            ballX,
-                            ballY),
-                        22));
-
-                ctx.Draw(
-                    Color.Black,
-                    3,
-                    new EllipsePolygon(
-                        new PointF(
-                            ballX,
-                            ballY),
-                        22));
             });
+
+            // الكرة
+            float ballX =
+                shotDirection == 1
+                    ? 320
+                    : shotDirection == 2
+                        ? 500
+                        : 680;
+
+            float ballY =
+                goal
+                    ? 180
+                    : 285;
+
+            DrawCircle(
+                image,
+                (int)ballX,
+                (int)ballY,
+                22,
+                Color.White);
+
+            DrawCircleOutline(
+                image,
+                (int)ballX,
+                (int)ballY,
+                22,
+                Color.Black,
+                3);
 
             // النصوص
             try
@@ -1302,7 +1285,7 @@ namespace PenaltyBot
 
                 image.Mutate(ctx =>
                 {
-                    var titleOptions =
+                    ctx.DrawText(
                         new RichTextOptions(
                             titleFont)
                         {
@@ -1310,10 +1293,7 @@ namespace PenaltyBot
                                 new PointF(
                                     50,
                                     30)
-                        };
-
-                    ctx.DrawText(
-                        titleOptions,
+                        },
                         title,
                         goal
                             ? Color.LimeGreen
@@ -1388,6 +1368,147 @@ namespace PenaltyBot
         }
 
         // =========================================================
+        // رسم دائرة بدون EllipsePolygon
+        // =========================================================
+
+        private static void DrawCircle(
+            Image<Rgba32> image,
+            int centerX,
+            int centerY,
+            int radius,
+            Color color)
+        {
+            image.ProcessPixelRows(
+                accessor =>
+                {
+                    int minY =
+                        Math.Max(
+                            0,
+                            centerY - radius);
+
+                    int maxY =
+                        Math.Min(
+                            image.Height - 1,
+                            centerY + radius);
+
+                    int minX =
+                        Math.Max(
+                            0,
+                            centerX - radius);
+
+                    int maxX =
+                        Math.Min(
+                            image.Width - 1,
+                            centerX + radius);
+
+                    float radiusSquared =
+                        radius * radius;
+
+                    for (int y = minY;
+                        y <= maxY;
+                        y++)
+                    {
+                        var row =
+                            accessor.GetRowSpan(y);
+
+                        for (int x = minX;
+                            x <= maxX;
+                            x++)
+                        {
+                            int dx =
+                                x - centerX;
+
+                            int dy =
+                                y - centerY;
+
+                            if ((dx * dx) +
+                                (dy * dy)
+                                <= radiusSquared)
+                            {
+                                row[x] =
+                                    color.ToPixel<Rgba32>();
+                            }
+                        }
+                    }
+                });
+        }
+
+        private static void DrawCircleOutline(
+            Image<Rgba32> image,
+            int centerX,
+            int centerY,
+            int radius,
+            Color color,
+            int thickness)
+        {
+            image.ProcessPixelRows(
+                accessor =>
+                {
+                    int minY =
+                        Math.Max(
+                            0,
+                            centerY - radius);
+
+                    int maxY =
+                        Math.Min(
+                            image.Height - 1,
+                            centerY + radius);
+
+                    int minX =
+                        Math.Max(
+                            0,
+                            centerX - radius);
+
+                    int maxX =
+                        Math.Min(
+                            image.Width - 1,
+                            centerX + radius);
+
+                    float outer =
+                        radius * radius;
+
+                    float innerRadius =
+                        Math.Max(
+                            0,
+                            radius - thickness);
+
+                    float inner =
+                        innerRadius *
+                        innerRadius;
+
+                    for (int y = minY;
+                        y <= maxY;
+                        y++)
+                    {
+                        var row =
+                            accessor.GetRowSpan(y);
+
+                        for (int x = minX;
+                            x <= maxX;
+                            x++)
+                        {
+                            int dx =
+                                x - centerX;
+
+                            int dy =
+                                y - centerY;
+
+                            float distance =
+                                (dx * dx) +
+                                (dy * dy);
+
+                            if (distance <= outer &&
+                                distance >= inner)
+                            {
+                                row[x] =
+                                    color.ToPixel<Rgba32>();
+                            }
+                        }
+                    }
+                });
+        }
+
+        // =========================================================
         // الأدوات
         // =========================================================
 
@@ -1432,40 +1553,21 @@ namespace PenaltyBot
                 var type =
                     message.GetType();
 
-                var prop =
-                    type.GetProperty(
-                        "GroupId");
-
-                if (prop != null)
+                string[] names =
                 {
-                    var value =
-                        prop.GetValue(message)
-                        ?.ToString();
+                    "GroupId",
+                    "RecipientId",
+                    "RoomId"
+                };
 
-                    if (!string.IsNullOrWhiteSpace(value))
-                        return value;
-                }
-
-                prop =
-                    type.GetProperty(
-                        "RecipientId");
-
-                if (prop != null)
+                foreach (var name in names)
                 {
-                    var value =
-                        prop.GetValue(message)
-                        ?.ToString();
+                    var prop =
+                        type.GetProperty(name);
 
-                    if (!string.IsNullOrWhiteSpace(value))
-                        return value;
-                }
+                    if (prop == null)
+                        continue;
 
-                prop =
-                    type.GetProperty(
-                        "RoomId");
-
-                if (prop != null)
-                {
                     var value =
                         prop.GetValue(message)
                         ?.ToString();
