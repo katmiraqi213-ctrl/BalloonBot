@@ -31,15 +31,16 @@ namespace PenaltyBot
     {
         public string GroupId { get; set; } = "";
 
-        public List<PenaltyPlayer> Players { get; set; } = new();
+        public List<PenaltyPlayer> Players { get; set; } =
+            new List<PenaltyPlayer>();
 
-        public int CurrentPlayerIndex { get; set; }
+        public int CurrentPlayerIndex { get; set; } = 0;
 
-        public bool Started { get; set; }
+        public bool Started { get; set; } = false;
 
-        public bool TurnAnswered { get; set; }
+        public bool TurnAnswered { get; set; } = false;
 
-        public long TurnId { get; set; }
+        public int TurnId { get; set; } = 0;
 
         public CancellationTokenSource? TurnCancellation { get; set; }
     }
@@ -48,167 +49,231 @@ namespace PenaltyBot
     {
         private static IWolfClient? _client;
 
-        private static readonly Dictionary<string, PenaltyGame> Games = new();
+        private static readonly Dictionary<string, PenaltyGame> Games =
+            new Dictionary<string, PenaltyGame>();
 
-        private static readonly object GameLock = new();
+        private static readonly object GameLock = new object();
 
-        private static readonly Random Random = new();
+        private static readonly Random Random =
+            new Random();
 
         private const int MaxPlayers = 10;
         private const int MinPlayers = 2;
-
         private const int ShotsPerPlayer = 5;
-
         private const int TurnSeconds = 25;
 
         public static async Task Main(string[] args)
         {
+            Console.WriteLine("================================");
+            Console.WriteLine("        PENALTY BOT");
+            Console.WriteLine("================================");
+
             try
             {
-                Console.WriteLine("======================================");
-                Console.WriteLine("       PENALTY BOT - WOLFLIVE");
-                Console.WriteLine("======================================");
-
-                _client = new WolfClient();
-
-                Console.WriteLine("البوت يحاول الاتصال...");
-
                 await ConnectBot();
 
-                Console.WriteLine("البوت متصل بنجاح.");
+                Console.WriteLine("Bot is running...");
 
                 await Task.Delay(Timeout.Infinite);
             }
             catch (Exception ex)
             {
-                Console.WriteLine("خطأ رئيسي:");
+                Console.WriteLine("MAIN ERROR:");
                 Console.WriteLine(ex);
-
-                await Task.Delay(5000);
             }
         }
+
+        // =========================================================
+        // CONNECT
+        // =========================================================
 
         private static async Task ConnectBot()
         {
-            if (_client == null)
-                return;
+            /*
+             * ضع بيانات حساب البوت هنا
+             */
 
-            var clientType = _client.GetType();
+            string email =
+                Environment.GetEnvironmentVariable("WOLF_EMAIL")
+                ?? "";
 
-            Console.WriteLine("WolfLive Client: " + clientType.FullName);
+            string password =
+                Environment.GetEnvironmentVariable("WOLF_PASSWORD")
+                ?? "";
 
-            var connectMethod = clientType
-                .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .FirstOrDefault(x =>
-                    x.Name.Equals("Connect", StringComparison.OrdinalIgnoreCase));
-
-            if (connectMethod != null)
+            if (string.IsNullOrWhiteSpace(email) ||
+                string.IsNullOrWhiteSpace(password))
             {
-                var parameters = connectMethod.GetParameters();
-
-                if (parameters.Length == 0)
-                {
-                    var result = connectMethod.Invoke(_client, null);
-
-                    if (result is Task task)
-                        await task;
-                }
+                Console.WriteLine(
+                    "WARNING: WOLF_EMAIL / WOLF_PASSWORD not set.");
             }
 
-            RegisterMessageHandler();
-        }
+            _client = new WolfClient();
 
-        private static void RegisterMessageHandler()
-        {
-            if (_client == null)
-                return;
+            RegisterMessageHandler(_client);
 
             try
             {
-                var clientType = _client.GetType();
+                bool result =
+                    await _client.Login(
+                        email,
+                        password);
 
-                var events = clientType
-                    .GetEvents(BindingFlags.Public | BindingFlags.Instance);
+                Console.WriteLine(
+                    "Login: " +
+                    (result ? "SUCCESS" : "FAILED"));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("LOGIN ERROR:");
+                Console.WriteLine(ex);
+                throw;
+            }
+        }
 
-                foreach (var ev in events)
+        // =========================================================
+        // MESSAGE HANDLER
+        // =========================================================
+
+        private static void RegisterMessageHandler(
+            IWolfClient client)
+        {
+            try
+            {
+                Type type = client.GetType();
+
+                Console.WriteLine(
+                    "Client type: " +
+                    type.FullName);
+
+                EventInfo[] events =
+                    type.GetEvents(
+                        BindingFlags.Public |
+                        BindingFlags.Instance);
+
+                foreach (EventInfo evt in events)
                 {
-                    if (ev.Name.Contains("Message", StringComparison.OrdinalIgnoreCase))
+                    string name =
+                        evt.Name.ToLowerInvariant();
+
+                    if (!name.Contains("message"))
+                        continue;
+
+                    Console.WriteLine(
+                        "Trying message event: " +
+                        evt.Name);
+
+                    MethodInfo? method =
+                        typeof(Program).GetMethod(
+                            nameof(GenericMessageHandler),
+                            BindingFlags.NonPublic |
+                            BindingFlags.Static);
+
+                    if (method == null)
+                        continue;
+
+                    Delegate? handler =
+                        Delegate.CreateDelegate(
+                            evt.EventHandlerType!,
+                            method);
+
+                    if (handler != null)
                     {
+                        evt.AddEventHandler(
+                            client,
+                            handler);
+
                         Console.WriteLine(
-                            "تم العثور على حدث الرسائل: " + ev.Name);
+                            "Message handler registered: " +
+                            evt.Name);
 
-                        try
-                        {
-                            var handler = Delegate.CreateDelegate(
-                                ev.EventHandlerType!,
-                                typeof(Program)
-                                    .GetMethod(
-                                        nameof(GenericMessageHandler),
-                                        BindingFlags.NonPublic |
-                                        BindingFlags.Static)!
-                            );
-
-                            ev.AddEventHandler(_client, handler);
-
-                            Console.WriteLine(
-                                "تم تسجيل استقبال الرسائل.");
-
-                            return;
-                        }
-                        catch
-                        {
-                        }
+                        return;
                     }
                 }
+
+                Console.WriteLine(
+                    "WARNING: Could not automatically find message event.");
             }
             catch (Exception ex)
             {
                 Console.WriteLine(
-                    "خطأ تسجيل الرسائل: " + ex.Message);
+                    "REGISTER HANDLER ERROR:");
+
+                Console.WriteLine(ex);
             }
         }
 
-        private static void GenericMessageHandler(object? sender, object? message)
+        private static async void GenericMessageHandler(
+            object? sender,
+            object? message)
         {
             try
             {
                 if (message == null)
                     return;
 
-                _ = HandleMessageObject(message);
+                await HandleMessageObject(message);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(
-                    "Message Handler Error: " + ex.Message);
+                    "MESSAGE HANDLER ERROR:");
+
+                Console.WriteLine(ex);
             }
         }
 
-        private static async Task HandleMessageObject(object message)
+        // =========================================================
+        // MESSAGE PARSING
+        // =========================================================
+
+        private static async Task HandleMessageObject(
+            object message)
         {
-            string text = GetMessageText(message);
+            try
+            {
+                string text =
+                    GetMessageText(message);
 
-            if (string.IsNullOrWhiteSpace(text))
-                return;
+                string groupId =
+                    GetGroupId(message);
 
-            string groupId = GetGroupId(message);
+                string userId =
+                    GetUserId(message);
 
-            if (string.IsNullOrWhiteSpace(groupId))
-                return;
+                string userName =
+                    GetUserName(message);
 
-            string userId = GetUserId(message);
+                if (string.IsNullOrWhiteSpace(text))
+                    return;
 
-            string userName = GetUserName(message);
+                if (string.IsNullOrWhiteSpace(groupId))
+                    return;
 
-            Console.WriteLine(
-                $"[{groupId}] {userName}: {text}");
+                if (string.IsNullOrWhiteSpace(userId))
+                    return;
 
-            await ProcessCommand(
-                groupId,
-                userId,
-                userName,
-                text);
+                Console.WriteLine(
+                    $"MESSAGE | Group={groupId} | User={userName} | Text={text}");
+
+                await ProcessCommand(
+                    groupId,
+                    userId,
+                    userName,
+                    text);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    "HANDLE MESSAGE ERROR:");
+
+                Console.WriteLine(ex);
+            }
         }
+
+        // =========================================================
+        // COMMANDS
+        // =========================================================
 
         private static async Task ProcessCommand(
             string groupId,
@@ -216,32 +281,36 @@ namespace PenaltyBot
             string userName,
             string text)
         {
-            text = text.Trim();
+            text =
+                text.Trim();
 
-            if (text.Equals("!جزاء مساعدة",
-                StringComparison.OrdinalIgnoreCase))
+            if (text.Equals(
+                    "!جزاء",
+                    StringComparison.OrdinalIgnoreCase) ||
+                text.Equals(
+                    "!جزاء مساعدة",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 await SendMessage(
                     groupId,
-                    "⚽ لعبة الجزاء\n\n" +
+                    "⚽ لعبة الجزاء ⚽\n\n" +
+                    "الأوامر:\n" +
                     "!جزاء انضم — الانضمام للعبة\n" +
                     "!جزاء لاعبين — عرض اللاعبين\n" +
-                    "!جزاء بدء — بدء المباراة\n" +
-                    "!جزاء حالة — حالة المباراة\n" +
-                    "!جزاء انهاء — إنهاء المباراة\n\n" +
-                    "بعد بدء المباراة:\n" +
-                    "1 = يسار\n" +
-                    "2 = وسط\n" +
-                    "3 = يمين\n\n" +
-                    "⏱️ لديك 25 ثانية لكل تسديدة\n" +
-                    "⚽ لكل لاعب 5 تسديدات"
-                );
-
+                    "!جزاء بدء — بدء اللعبة\n" +
+                    "!جزاء حالة — حالة اللعبة\n" +
+                    "!جزاء انهاء — إنهاء اللعبة\n\n" +
+                    "أثناء دورك:\n" +
+                    "1 — تسديد يسار\n" +
+                    "2 — تسديد وسط\n" +
+                    "3 — تسديد يمين\n\n" +
+                    $"⏱ لديك {TurnSeconds} ثانية للإجابة.");
                 return;
             }
 
-            if (text.Equals("!جزاء انضم",
-                StringComparison.OrdinalIgnoreCase))
+            if (text.Equals(
+                    "!جزاء انضم",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 await JoinGame(
                     groupId,
@@ -251,74 +320,73 @@ namespace PenaltyBot
                 return;
             }
 
-            if (text.Equals("!جزاء لاعبين",
-                StringComparison.OrdinalIgnoreCase))
+            if (text.Equals(
+                    "!جزاء لاعبين",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 await ShowPlayers(groupId);
                 return;
             }
 
-            if (text.Equals("!جزاء بدء",
-                StringComparison.OrdinalIgnoreCase))
+            if (text.Equals(
+                    "!جزاء بدء",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 await StartGame(groupId);
                 return;
             }
 
-            if (text.Equals("!جزاء حالة",
-                StringComparison.OrdinalIgnoreCase))
+            if (text.Equals(
+                    "!جزاء حالة",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 await ShowStatus(groupId);
                 return;
             }
 
-            if (text.Equals("!جزاء انهاء",
-                StringComparison.OrdinalIgnoreCase))
+            if (text.Equals(
+                    "!جزاء انهاء",
+                    StringComparison.OrdinalIgnoreCase))
             {
                 await EndGame(groupId);
                 return;
             }
 
-            if (text == "1")
+            if (text == "1" ||
+                text == "2" ||
+                text == "3")
             {
-                await ProcessShot(groupId, userId, 1);
-                return;
-            }
+                await ProcessShot(
+                    groupId,
+                    userId,
+                    int.Parse(text));
 
-            if (text == "2")
-            {
-                await ProcessShot(groupId, userId, 2);
-                return;
-            }
-
-            if (text == "3")
-            {
-                await ProcessShot(groupId, userId, 3);
                 return;
             }
         }
+
+        // =========================================================
+        // JOIN
+        // =========================================================
 
         private static async Task JoinGame(
             string groupId,
             string userId,
             string userName)
         {
-            if (string.IsNullOrWhiteSpace(userId))
-                userId = userName;
-
-            if (string.IsNullOrWhiteSpace(userName))
-                userName = "لاعب";
-
             PenaltyGame game;
 
             lock (GameLock)
             {
-                if (!Games.TryGetValue(groupId, out game!))
+                if (!Games.TryGetValue(
+                        groupId,
+                        out game!))
                 {
-                    game = new PenaltyGame
-                    {
-                        GroupId = groupId
-                    };
+                    game =
+                        new PenaltyGame
+                        {
+                            GroupId = groupId
+                        };
 
                     Games[groupId] = game;
                 }
@@ -327,18 +395,17 @@ namespace PenaltyBot
                 {
                     _ = SendMessage(
                         groupId,
-                        "⚠️ اللعبة بدأت بالفعل، لا يمكن الانضمام الآن."
-                    );
+                        "⚠️ اللعبة بدأت بالفعل.");
 
                     return;
                 }
 
-                if (game.Players.Any(x => x.UserId == userId))
+                if (game.Players.Any(
+                        x => x.UserId == userId))
                 {
                     _ = SendMessage(
                         groupId,
-                        $"⚠️ {userName} أنت مسجل باللعبة مسبقاً."
-                    );
+                        "⚠️ أنت مشترك بالفعل.");
 
                     return;
                 }
@@ -347,110 +414,122 @@ namespace PenaltyBot
                 {
                     _ = SendMessage(
                         groupId,
-                        "❌ اكتمل عدد اللاعبين. الحد الأقصى 10 لاعبين."
-                    );
+                        $"⚠️ اكتمل العدد. الحد الأقصى {MaxPlayers} لاعبين.");
 
                     return;
                 }
 
-                var player = new PenaltyPlayer
-                {
-                    UserId = userId,
-                    Name = userName,
-                    Number = game.Players.Count + 1
-                };
+                int number =
+                    game.Players.Count + 1;
 
-                game.Players.Add(player);
-
-                _ = SendMessage(
-                    groupId,
-                    $"✅ {userName} انضم للعبة الجزاء!\n" +
-                    $"👥 عدد اللاعبين: {game.Players.Count}/{MaxPlayers}\n\n" +
-                    "اكتب !جزاء بدء عندما يكتمل اللاعبون."
-                );
-            }
-
-            await Task.CompletedTask;
-        }
-
-        private static async Task ShowPlayers(string groupId)
-        {
-            PenaltyGame? game;
-
-            lock (GameLock)
-            {
-                Games.TryGetValue(groupId, out game);
-            }
-
-            if (game == null || game.Players.Count == 0)
-            {
-                await SendMessage(
-                    groupId,
-                    "⚠️ لا يوجد لاعبون مسجلون حالياً."
-                );
-
-                return;
-            }
-
-            List<PenaltyPlayer> players;
-
-            lock (GameLock)
-            {
-                players = game.Players
-                    .Select(x => new PenaltyPlayer
+                game.Players.Add(
+                    new PenaltyPlayer
                     {
-                        UserId = x.UserId,
-                        Name = x.Name,
-                        Number = x.Number,
-                        Shots = x.Shots,
-                        Goals = x.Goals,
-                        Eliminated = x.Eliminated
-                    })
-                    .ToList();
-            }
-
-            var lines = new List<string>
-            {
-                "⚽ لاعبو لعبة الجزاء:",
-                ""
-            };
-
-            foreach (var player in players)
-            {
-                lines.Add($"{player.Number}. {player.Name}");
+                        UserId = userId,
+                        Name = string.IsNullOrWhiteSpace(userName)
+                            ? userId
+                            : userName,
+                        Number = number
+                    });
             }
 
             await SendMessage(
                 groupId,
-                string.Join("\n", lines));
+                $"✅ {userName} انضم للعبة.\n" +
+                $"👥 عدد اللاعبين: {GetPlayerCount(groupId)}/{MaxPlayers}\n\n" +
+                "اكتب !جزاء بدء عندما يكتمل العدد.");
         }
 
-        private static async Task StartGame(string groupId)
+        private static int GetPlayerCount(
+            string groupId)
+        {
+            lock (GameLock)
+            {
+                if (!Games.TryGetValue(
+                        groupId,
+                        out PenaltyGame? game))
+                    return 0;
+
+                return game.Players.Count;
+            }
+        }
+
+        // =========================================================
+        // PLAYERS
+        // =========================================================
+
+        private static async Task ShowPlayers(
+            string groupId)
         {
             PenaltyGame? game;
 
             lock (GameLock)
             {
-                if (!Games.TryGetValue(groupId, out game))
-                    game = null;
+                Games.TryGetValue(
+                    groupId,
+                    out game);
+            }
 
-                if (game == null)
-                {
-                    _ = SendMessage(
+            if (game == null ||
+                game.Players.Count == 0)
+            {
+                await SendMessage(
+                    groupId,
+                    "⚠️ لا يوجد لاعبين.");
+                return;
+            }
+
+            string result =
+                "⚽ لاعبين لعبة الجزاء ⚽\n\n";
+
+            foreach (PenaltyPlayer player in game.Players)
+            {
+                string status =
+                    player.Eliminated
+                        ? "❌ خارج اللعبة"
+                        : "🟢";
+
+                result +=
+                    $"{player.Number}. {player.Name} {status}\n";
+            }
+
+            result +=
+                $"\n👥 العدد: {game.Players.Count}/{MaxPlayers}";
+
+            await SendMessage(
+                groupId,
+                result);
+        }
+
+        // =========================================================
+        // START GAME
+        // =========================================================
+
+        private static async Task StartGame(
+            string groupId)
+        {
+            PenaltyGame? game;
+
+            lock (GameLock)
+            {
+                if (!Games.TryGetValue(
                         groupId,
-                        "❌ لا توجد لعبة. استخدم !جزاء انضم أولاً."
-                    );
+                        out game))
+                {
+                    game =
+                        new PenaltyGame
+                        {
+                            GroupId = groupId
+                        };
 
-                    return;
+                    Games[groupId] = game;
                 }
 
                 if (game.Started)
                 {
                     _ = SendMessage(
                         groupId,
-                        "⚠️ اللعبة بدأت بالفعل."
-                    );
-
+                        "⚠️ اللعبة بدأت بالفعل.");
                     return;
                 }
 
@@ -458,18 +537,15 @@ namespace PenaltyBot
                 {
                     _ = SendMessage(
                         groupId,
-                        $"❌ تحتاج اللعبة إلى {MinPlayers} لاعبين على الأقل."
-                    );
+                        $"⚠️ يجب أن يكون هناك {MinPlayers} لاعبين على الأقل.");
 
                     return;
                 }
 
                 game.Started = true;
                 game.CurrentPlayerIndex = 0;
-                game.TurnAnswered = false;
-                game.TurnId = 0;
 
-                foreach (var player in game.Players)
+                foreach (PenaltyPlayer player in game.Players)
                 {
                     player.Shots = 0;
                     player.Goals = 0;
@@ -479,107 +555,124 @@ namespace PenaltyBot
 
             await SendMessage(
                 groupId,
-                "🏆 بدأت لعبة الجزاء!\n\n" +
-                $"👥 عدد اللاعبين: {game.Players.Count}\n" +
-                "⚽ لكل لاعب 5 تسديدات\n" +
-                "⏱️ لديك 25 ثانية لكل تسديدة\n\n" +
-                "1️⃣ يسار\n" +
-                "2️⃣ وسط\n" +
-                "3️⃣ يمين"
-            );
+                "🔥 بدأت لعبة الجزاء! 🔥\n\n" +
+                $"⚽ كل لاعب لديه {ShotsPerPlayer} تسديدات.\n" +
+                $"⏱ وقت كل دور {TurnSeconds} ثانية.\n\n" +
+                "استعدوا...");
 
             await Task.Delay(1000);
 
             await StartTurn(groupId);
         }
 
-        private static async Task StartTurn(string groupId)
+        // =========================================================
+        // START TURN
+        // =========================================================
+
+        private static async Task StartTurn(
+            string groupId)
         {
-            PenaltyGame? game;
-            PenaltyPlayer? player;
-            long turnId;
-            CancellationTokenSource cts;
+            PenaltyPlayer? player = null;
+            int turnId;
 
             lock (GameLock)
             {
-                if (!Games.TryGetValue(groupId, out game))
+                if (!Games.TryGetValue(
+                        groupId,
+                        out PenaltyGame? game))
                     return;
 
                 if (!game.Started)
                     return;
 
-                if (game.Players.Count == 0)
-                    return;
-
-                int foundIndex = -1;
-
-                for (int i = 0; i < game.Players.Count; i++)
+                while (
+                    game.CurrentPlayerIndex <
+                    game.Players.Count &&
+                    game.Players[
+                        game.CurrentPlayerIndex
+                    ].Eliminated)
                 {
-                    int index =
-                        (game.CurrentPlayerIndex + i)
-                        % game.Players.Count;
-
-                    if (game.Players[index].Shots < ShotsPerPlayer)
-                    {
-                        foundIndex = index;
-                        break;
-                    }
+                    game.CurrentPlayerIndex++;
                 }
 
-                if (foundIndex == -1)
+                if (
+                    game.CurrentPlayerIndex >=
+                    game.Players.Count)
                 {
-                    game.Started = false;
                     _ = FinishGame(groupId);
                     return;
                 }
 
-                game.CurrentPlayerIndex = foundIndex;
-                player = game.Players[foundIndex];
+                player =
+                    game.Players[
+                        game.CurrentPlayerIndex];
+
                 game.TurnAnswered = false;
+
                 game.TurnId++;
-                turnId = game.TurnId;
 
-                try
-                {
-                    game.TurnCancellation?.Cancel();
-                }
-                catch
-                {
-                }
+                turnId =
+                    game.TurnId;
 
-                cts = new CancellationTokenSource();
-                game.TurnCancellation = cts;
+                game.TurnCancellation?.Cancel();
+
+                game.TurnCancellation =
+                    new CancellationTokenSource();
             }
 
-            int remainingShots =
-                ShotsPerPlayer - player.Shots;
+            if (player == null)
+                return;
 
             await SendMessage(
                 groupId,
                 $"⚽ دور اللاعب: {player.Name}\n\n" +
-                $"🎯 التسديدة: {player.Shots + 1}/{ShotsPerPlayer}\n" +
-                $"⚽ الأهداف: {player.Goals}\n" +
-                $"📊 المتبقي لك: {remainingShots} تسديدة\n\n" +
-                "اختار اتجاه التسديدة:\n" +
+                $"🎯 التسديدة رقم {player.Shots + 1}/{ShotsPerPlayer}\n\n" +
+                "اختر الاتجاه:\n" +
                 "1️⃣ يسار\n" +
                 "2️⃣ وسط\n" +
                 "3️⃣ يمين\n\n" +
-                "⏱️ لديك 25 ثانية!"
-            );
+                $"⏱ لديك {TurnSeconds} ثانية.");
+
+            byte[] image =
+                CreatePenaltyImage(
+                    player.Name,
+                    player.Shots + 1,
+                    null,
+                    false);
+
+            await SendImage(
+                groupId,
+                image);
 
             _ = StartTurnTimeout(
                 groupId,
                 player.UserId,
-                turnId,
-                cts.Token);
+                turnId);
         }
+
+        // =========================================================
+        // TIMEOUT
+        // =========================================================
 
         private static async Task StartTurnTimeout(
             string groupId,
             string userId,
-            long turnId,
-            CancellationToken token)
+            int turnId)
         {
+            CancellationToken token;
+
+            lock (GameLock)
+            {
+                if (!Games.TryGetValue(
+                        groupId,
+                        out PenaltyGame? game))
+                    return;
+
+                token =
+                    game.TurnCancellation?.Token
+                    ?? CancellationToken.None;
+            }
+
             try
             {
                 await Task.Delay(
@@ -600,18 +693,15 @@ namespace PenaltyBot
         private static async Task TimeoutPlayer(
             string groupId,
             string userId,
-            long turnId)
+            int turnId)
         {
-            string playerName = "";
-            bool shouldFinish = false;
-            bool shouldContinue = false;
+            PenaltyPlayer? player = null;
 
             lock (GameLock)
             {
-                if (!Games.TryGetValue(groupId, out var game))
-                    return;
-
-                if (!game.Started)
+                if (!Games.TryGetValue(
+                        groupId,
+                        out PenaltyGame? game))
                     return;
 
                 if (game.TurnId != turnId)
@@ -620,274 +710,210 @@ namespace PenaltyBot
                 if (game.TurnAnswered)
                     return;
 
-                int index = game.Players.FindIndex(
-                    x => x.UserId == userId);
+                player =
+                    game.Players.FirstOrDefault(
+                        x => x.UserId == userId);
 
-                if (index < 0)
+                if (player == null)
                     return;
 
-                playerName = game.Players[index].Name;
                 game.TurnAnswered = true;
-                game.Players[index].Eliminated = true;
 
-                game.Players.RemoveAt(index);
+                /*
+                 * مهم:
+                 * اللاعب ينطرد من اللعبة فقط
+                 * وليس من روم Wolf.
+                 */
 
-                if (game.Players.Count == 0)
-                {
-                    game.Started = false;
-                    Games.Remove(groupId);
-                }
-                else
-                {
-                    if (index < game.CurrentPlayerIndex)
-                        game.CurrentPlayerIndex--;
+                player.Eliminated = true;
 
-                    if (game.CurrentPlayerIndex >= game.Players.Count)
-                        game.CurrentPlayerIndex = 0;
-
-                    shouldFinish =
-                        game.Players.All(
-                            x => x.Shots >= ShotsPerPlayer);
-
-                    if (!shouldFinish)
-                        shouldContinue = true;
-                }
-
-                try
-                {
-                    game.TurnCancellation?.Cancel();
-                }
-                catch
-                {
-                }
+                game.CurrentPlayerIndex++;
             }
 
             await SendMessage(
                 groupId,
-                $"⏰ انتهى الوقت!\n\n" +
-                $"❌ اللاعب {playerName} لم يسدد خلال 25 ثانية.\n" +
-                "🚫 تم حذفه من لعبة الجزاء فقط.\n" +
-                "ℹ️ لم يتم طرده من الروم."
-            );
+                $"⏰ انتهى الوقت!\n" +
+                $"❌ {player.Name} لم يسدد وتم إخراجه من لعبة الجزاء.\n" +
+                "🚫 لم يتم طرده من الروم.");
 
-            if (shouldFinish)
-            {
-                await FinishGame(groupId);
-                return;
-            }
+            await Task.Delay(500);
 
-            if (shouldContinue)
-            {
-                await Task.Delay(800);
-                await StartTurn(groupId);
-            }
+            await CheckGameAfterTurn(groupId);
         }
+
+        // =========================================================
+        // SHOT
+        // =========================================================
 
         private static async Task ProcessShot(
             string groupId,
             string userId,
             int direction)
         {
-            PenaltyGame? game;
-            PenaltyPlayer? player;
-            long turnId;
+            PenaltyPlayer? player = null;
+            bool goal = false;
+            int shotNumber = 0;
+            int turnId = 0;
 
             lock (GameLock)
             {
-                if (!Games.TryGetValue(groupId, out game))
+                if (!Games.TryGetValue(
+                        groupId,
+                        out PenaltyGame? game))
                     return;
 
                 if (!game.Started)
                     return;
 
-                if (game.Players.Count == 0)
+                if (game.TurnAnswered)
+                    return;
+
+                if (
+                    game.CurrentPlayerIndex <
+                    0 ||
+                    game.CurrentPlayerIndex >=
+                    game.Players.Count)
                     return;
 
                 player =
-                    game.Players[game.CurrentPlayerIndex];
+                    game.Players[
+                        game.CurrentPlayerIndex];
+
+                if (player.Eliminated)
+                    return;
 
                 if (player.UserId != userId)
                     return;
 
-                if (game.TurnAnswered)
-                    return;
-
-                turnId = game.TurnId;
-            }
-
-            int keeperDirection;
-
-            lock (Random)
-            {
-                keeperDirection = Random.Next(1, 4);
-            }
-
-            bool goal = direction != keeperDirection;
-
-            int shotNumber;
-
-            lock (GameLock)
-            {
-                if (!Games.TryGetValue(groupId, out game))
-                    return;
-
-                if (!game.Started)
-                    return;
-
-                if (game.TurnId != turnId)
-                    return;
-
-                if (game.TurnAnswered)
-                    return;
-
-                if (game.Players.Count == 0)
-                    return;
-
-                var current =
-                    game.Players[game.CurrentPlayerIndex];
-
-                if (current.UserId != userId)
-                    return;
-
                 game.TurnAnswered = true;
-                current.Shots++;
-                shotNumber = current.Shots;
+
+                game.TurnCancellation?.Cancel();
+
+                player.Shots++;
+
+                shotNumber =
+                    player.Shots;
+
+                turnId =
+                    game.TurnId;
+
+                /*
+                 * احتمال التصدي.
+                 * يمكن تغييره حسب رغبتك.
+                 */
+                int keeperDirection =
+                    Random.Next(1, 4);
+
+                goal =
+                    keeperDirection != direction;
 
                 if (goal)
-                    current.Goals++;
-
-                try
-                {
-                    game.TurnCancellation?.Cancel();
-                }
-                catch
-                {
-                }
-
-                player = current;
+                    player.Goals++;
             }
 
             string directionName =
                 GetDirectionName(direction);
 
-            string keeperName =
-                GetDirectionName(keeperDirection);
-
             if (goal)
             {
                 await SendMessage(
                     groupId,
-                    $"⚽🔥 GOAL!\n\n" +
-                    $"👤 اللاعب: {player.Name}\n" +
-                    $"🎯 التسديدة: {shotNumber}/{ShotsPerPlayer}\n" +
-                    $"➡️ الاتجاه: {directionName}\n" +
-                    $"🧤 الحارس: {keeperName}\n\n" +
-                    $"🥅 هدف! مبروك!\n" +
-                    $"📊 أهدافك: {player.Goals}"
-                );
+                    $"⚽🔥 هدف!\n\n" +
+                    $"👤 اللاعب: {player!.Name}\n" +
+                    $"🎯 الاتجاه: {directionName}\n" +
+                    $"🥅 الهدف رقم: {player.Goals}\n" +
+                    $"📊 التسديدات: {player.Shots}/{ShotsPerPlayer}");
             }
             else
             {
                 await SendMessage(
                     groupId,
-                    $"🧤❌ SAVE!\n\n" +
-                    $"👤 اللاعب: {player.Name}\n" +
-                    $"🎯 التسديدة: {shotNumber}/{ShotsPerPlayer}\n" +
-                    $"➡️ الاتجاه: {directionName}\n" +
-                    $"🧤 الحارس: {keeperName}\n\n" +
-                    "❌ الحارس تصدى للكرة!"
-                );
+                    $"🧤❌ تصدي!\n\n" +
+                    $"👤 اللاعب: {player!.Name}\n" +
+                    $"🎯 الاتجاه: {directionName}\n" +
+                    $"📊 التسديدات: {player.Shots}/{ShotsPerPlayer}");
             }
 
-            try
-            {
-                byte[] imageBytes =
-                    CreatePenaltyImage(
-                        player,
-                        direction,
-                        keeperDirection,
-                        goal);
+            byte[] image =
+                CreatePenaltyImage(
+                    player.Name,
+                    shotNumber,
+                    direction,
+                    goal);
 
-                Console.WriteLine(
-                    "IMAGE BYTES: " + imageBytes.Length);
-
-                await SendImage(
-                    groupId,
-                    imageBytes);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(
-                    "Image Error: " + ex);
-            }
+            await SendImage(
+                groupId,
+                image);
 
             await Task.Delay(700);
 
-            bool finished = false;
-            bool nextTurn = false;
+            await CheckGameAfterTurn(
+                groupId);
+        }
+
+        // =========================================================
+        // CHECK TURN
+        // =========================================================
+
+        private static async Task CheckGameAfterTurn(
+            string groupId)
+        {
+            bool finish = false;
 
             lock (GameLock)
             {
-                if (!Games.TryGetValue(groupId, out game))
+                if (!Games.TryGetValue(
+                        groupId,
+                        out PenaltyGame? game))
                     return;
 
                 if (!game.Started)
                     return;
 
-                if (game.Players.Count > 0 &&
+                /*
+                 * إذا كل اللاعبين خلصوا 5 تسديدات
+                 * أو تم إخراجهم من اللعبة.
+                 */
+
+                bool allDone =
                     game.Players.All(
-                        x => x.Shots >= ShotsPerPlayer))
+                        p =>
+                            p.Eliminated ||
+                            p.Shots >= ShotsPerPlayer);
+
+                if (allDone)
                 {
-                    finished = true;
+                    finish = true;
                 }
                 else
                 {
-                    var current =
-                        game.Players[game.CurrentPlayerIndex];
+                    game.CurrentPlayerIndex++;
 
-                    if (current.Shots >= ShotsPerPlayer)
+                    if (
+                        game.CurrentPlayerIndex >=
+                        game.Players.Count)
                     {
-                        nextTurn = true;
-
-                        int oldIndex =
-                            game.CurrentPlayerIndex;
-
-                        int count =
-                            game.Players.Count;
-
-                        for (int i = 1; i <= count; i++)
-                        {
-                            int nextIndex =
-                                (oldIndex + i) % count;
-
-                            if (game.Players[nextIndex].Shots <
-                                ShotsPerPlayer)
-                            {
-                                game.CurrentPlayerIndex =
-                                    nextIndex;
-
-                                break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        nextTurn = true;
+                        game.CurrentPlayerIndex = 0;
                     }
                 }
             }
 
-            if (finished)
+            if (finish)
             {
                 await FinishGame(groupId);
-                return;
             }
-
-            if (nextTurn)
+            else
+            {
                 await StartTurn(groupId);
+            }
         }
 
-        private static string GetDirectionName(int direction)
+        // =========================================================
+        // DIRECTION
+        // =========================================================
+
+        private static string GetDirectionName(
+            int direction)
         {
             return direction switch
             {
@@ -898,373 +924,339 @@ namespace PenaltyBot
             };
         }
 
-        private static async Task ShowStatus(string groupId)
+        // =========================================================
+        // STATUS
+        // =========================================================
+
+        private static async Task ShowStatus(
+            string groupId)
         {
             PenaltyGame? game;
 
             lock (GameLock)
             {
-                Games.TryGetValue(groupId, out game);
+                Games.TryGetValue(
+                    groupId,
+                    out game);
             }
 
             if (game == null)
             {
                 await SendMessage(
                     groupId,
-                    "⚠️ لا توجد لعبة حالياً."
-                );
-
+                    "⚠️ لا توجد لعبة حالياً.");
                 return;
             }
 
-            string message;
+            string text =
+                "⚽ حالة لعبة الجزاء ⚽\n\n";
 
-            lock (GameLock)
+            text +=
+                $"👥 اللاعبين: {game.Players.Count}\n";
+
+            text +=
+                $"🎮 الحالة: " +
+                (game.Started
+                    ? "🟢 بدأت"
+                    : "🟡 انتظار") +
+                "\n\n";
+
+            foreach (PenaltyPlayer player in game.Players)
             {
-                if (game.Players.Count == 0)
-                {
-                    message = "⚠️ لا يوجد لاعبون.";
-                }
-                else
-                {
-                    var lines =
-                        new List<string>();
+                string status =
+                    player.Eliminated
+                        ? "❌ خارج اللعبة"
+                        : "🟢";
 
-                    lines.Add(
-                        game.Started
-                            ? "🏆 اللعبة جارية"
-                            : "⏸️ اللعبة غير مبدوءة");
-
-                    lines.Add("");
-                    lines.Add(
-                        $"👥 اللاعبون: {game.Players.Count}");
-                    lines.Add("");
-
-                    for (int i = 0;
-                         i < game.Players.Count;
-                         i++)
-                    {
-                        var p =
-                            game.Players[i];
-
-                        string current =
-                            game.Started &&
-                            i == game.CurrentPlayerIndex
-                                ? " 👈"
-                                : "";
-
-                        lines.Add(
-                            $"{p.Number}. {p.Name} — " +
-                            $"{p.Goals} هدف / {p.Shots} تسديدات" +
-                            current);
-                    }
-
-                    message =
-                        string.Join("\n", lines);
-                }
+                text +=
+                    $"{player.Number}. {player.Name} " +
+                    $"| ⚽ {player.Goals} " +
+                    $"| 🎯 {player.Shots}/{ShotsPerPlayer} " +
+                    $"| {status}\n";
             }
 
             await SendMessage(
                 groupId,
-                message);
+                text);
         }
 
-        private static async Task EndGame(string groupId)
+        // =========================================================
+        // END GAME
+        // =========================================================
+
+        private static async Task EndGame(
+            string groupId)
         {
             PenaltyGame? game;
-
-            lock (GameLock)
-            {
-                if (!Games.TryGetValue(groupId, out game))
-                {
-                    game = null;
-                }
-                else
-                {
-                    game.Started = false;
-
-                    try
-                    {
-                        game.TurnCancellation?.Cancel();
-                    }
-                    catch
-                    {
-                    }
-
-                    Games.Remove(groupId);
-                }
-            }
-
-            if (game == null)
-            {
-                await SendMessage(
-                    groupId,
-                    "⚠️ لا توجد لعبة لإنهائها."
-                );
-
-                return;
-            }
-
-            await SendMessage(
-                groupId,
-                "🛑 تم إنهاء لعبة الجزاء."
-            );
-        }
-
-        private static async Task FinishGame(string groupId)
-        {
-            List<PenaltyPlayer> ranking;
 
             lock (GameLock)
             {
                 if (!Games.TryGetValue(
-                    groupId,
-                    out var game))
+                        groupId,
+                        out game))
                 {
+                    _ = SendMessage(
+                        groupId,
+                        "⚠️ لا توجد لعبة.");
                     return;
                 }
 
-                game.Started = false;
-
-                try
-                {
-                    game.TurnCancellation?.Cancel();
-                }
-                catch
-                {
-                }
-
-                ranking =
-                    game.Players
-                        .OrderByDescending(
-                            x => x.Goals)
-                        .ThenByDescending(
-                            x => x.Shots)
-                        .Select(x =>
-                            new PenaltyPlayer
-                            {
-                                UserId = x.UserId,
-                                Name = x.Name,
-                                Number = x.Number,
-                                Shots = x.Shots,
-                                Goals = x.Goals
-                            })
-                        .ToList();
+                game.TurnCancellation?.Cancel();
 
                 Games.Remove(groupId);
             }
 
-            if (ranking.Count == 0)
+            await SendMessage(
+                groupId,
+                "🛑 تم إنهاء لعبة الجزاء.");
+
+            Console.WriteLine(
+                "Game ended: " +
+                groupId);
+        }
+
+        // =========================================================
+        // FINISH GAME
+        // =========================================================
+
+        private static async Task FinishGame(
+            string groupId)
+        {
+            List<PenaltyPlayer> players;
+
+            lock (GameLock)
+            {
+                if (!Games.TryGetValue(
+                        groupId,
+                        out PenaltyGame? game))
+                    return;
+
+                game.Started = false;
+
+                game.TurnCancellation?.Cancel();
+
+                players =
+                    game.Players
+                        .Where(x => !x.Eliminated)
+                        .OrderByDescending(x => x.Goals)
+                        .ThenByDescending(x => x.Shots)
+                        .ToList();
+            }
+
+            if (players.Count == 0)
             {
                 await SendMessage(
                     groupId,
-                    "🏁 انتهت اللعبة.\nلا يوجد لاعبون."
-                );
+                    "🏁 انتهت اللعبة.\n" +
+                    "❌ لا يوجد لاعب باقٍ.");
+
+                lock (GameLock)
+                {
+                    Games.Remove(groupId);
+                }
 
                 return;
             }
 
-            var lines =
-                new List<string>();
+            PenaltyPlayer winner =
+                players[0];
 
-            lines.Add(
-                "🏆🏆 انتهت لعبة الجزاء! 🏆🏆");
+            string result =
+                "🏆⚽ انتهت لعبة الجزاء ⚽🏆\n\n" +
+                $"🥇 الفائز: {winner.Name}\n" +
+                $"⚽ الأهداف: {winner.Goals}\n" +
+                $"🎯 التسديدات: {winner.Shots}\n\n" +
+                "📊 النتائج:\n";
 
-            lines.Add("");
-            lines.Add("📊 النتائج النهائية:");
-            lines.Add("");
+            int rank = 1;
 
-            for (int i = 0;
-                 i < ranking.Count;
-                 i++)
+            foreach (PenaltyPlayer player in players)
             {
-                var p =
-                    ranking[i];
+                result +=
+                    $"{rank}. {player.Name} — " +
+                    $"{player.Goals} هدف / " +
+                    $"{player.Shots} تسديدة\n";
 
-                string medal =
-                    i switch
-                    {
-                        0 => "🥇",
-                        1 => "🥈",
-                        2 => "🥉",
-                        _ => "🏅"
-                    };
-
-                lines.Add(
-                    $"{medal} {i + 1}. {p.Name}\n" +
-                    $"   ⚽ {p.Goals} أهداف / " +
-                    $"{p.Shots} تسديدات");
+                rank++;
             }
-
-            lines.Add("");
-            lines.Add(
-                "🎮 لإنشاء لعبة جديدة استخدم:");
-            lines.Add("!جزاء انضم");
 
             await SendMessage(
                 groupId,
-                string.Join("\n", lines));
+                result);
+
+            lock (GameLock)
+            {
+                Games.Remove(groupId);
+            }
         }
 
+        // =========================================================
+        // IMAGE
+        // =========================================================
+
         private static byte[] CreatePenaltyImage(
-            PenaltyPlayer player,
-            int shotDirection,
-            int keeperDirection,
+            string playerName,
+            int shotNumber,
+            int? direction,
             bool goal)
         {
-            const int width = 1000;
-            const int height = 650;
+            const int width = 900;
+            const int height = 600;
 
-            using var image =
+            using Image<Rgba32> image =
                 new Image<Rgba32>(
                     width,
                     height);
 
+            /*
+             * خلفية
+             */
             FillRect(
                 image,
-                0, 0,
-                width, height,
-                new Rgba32(20, 30, 45));
+                0,
+                0,
+                width,
+                height,
+                new Rgba32(
+                    25,
+                    25,
+                    30,
+                    255));
 
+            /*
+             * أرضية
+             */
             FillRect(
                 image,
-                0, 0,
-                width, 300,
-                new Rgba32(80, 150, 210));
+                0,
+                390,
+                width,
+                210,
+                new Rgba32(
+                    30,
+                    120,
+                    50,
+                    255));
 
-            FillRect(
-                image,
-                0, 280,
-                width, 370,
-                new Rgba32(40, 145, 65));
-
+            /*
+             * منطقة الجزاء
+             */
             DrawRect(
                 image,
-                40, 300,
-                920, 300,
-                4,
-                new Rgba32(245, 245, 245));
+                250,
+                330,
+                400,
+                260,
+                new Rgba32(
+                    255,
+                    255,
+                    255,
+                    255),
+                5);
 
-            DrawRect(
-                image,
-                220, 330,
-                560, 250,
-                5,
-                new Rgba32(245, 245, 245));
+            /*
+             * المرمى
+             */
+            DrawGoal(
+                image);
 
-            FillCircle(
-                image,
-                500, 520,
-                8,
-                new Rgba32(255, 255, 255));
-
-            DrawGoal(image);
-
-            int keeperX =
-                keeperDirection switch
-                {
-                    1 => 390,
-                    2 => 500,
-                    3 => 610,
-                    _ => 500
-                };
-
+            /*
+             * حارس
+             */
             DrawKeeper(
-                image,
-                keeperX,
-                240);
+                image);
 
-            int ballX =
-                shotDirection switch
-                {
-                    1 => 385,
-                    2 => 500,
-                    3 => 615,
-                    _ => 500
-                };
+            /*
+             * الكرة
+             */
+            int ballX = 450;
+            int ballY = 470;
 
-            int ballY = 155;
+            if (direction.HasValue)
+            {
+                ballX =
+                    direction.Value switch
+                    {
+                        1 => 330,
+                        2 => 450,
+                        3 => 570,
+                        _ => 450
+                    };
+
+                ballY =
+                    goal
+                        ? 350
+                        : 410;
+            }
 
             FillCircle(
                 image,
                 ballX,
                 ballY,
-                24,
-                new Rgba32(250, 250, 250));
+                18,
+                new Rgba32(
+                    255,
+                    255,
+                    255,
+                    255));
 
             DrawCircle(
                 image,
                 ballX,
                 ballY,
-                24,
-                4,
-                new Rgba32(20, 20, 20));
-
-            if (goal)
-                DrawGoalEffect(image, ballX, ballY);
-            else
-                DrawSaveEffect(image, keeperX, 240);
-
-            Rgba32 bannerColor =
-                goal
-                    ? new Rgba32(20, 170, 70)
-                    : new Rgba32(190, 40, 45);
-
-            FillRect(
-                image,
-                0, 0,
-                width, 85,
-                bannerColor);
-
-            int shotCount =
-                Math.Clamp(
-                    player.Shots,
+                18,
+                new Rgba32(
                     0,
-                    ShotsPerPlayer);
+                    0,
+                    0,
+                    255),
+                3);
 
-            for (int i = 0;
-                 i < ShotsPerPlayer;
-                 i++)
+            /*
+             * تأثير الهدف / التصدي
+             */
+            if (direction.HasValue)
             {
-                int x =
-                    390 + i * 55;
-
-                if (i < shotCount)
+                if (goal)
                 {
-                    FillCircle(
+                    DrawGoalEffect(
                         image,
-                        x, 42,
-                        15,
-                        new Rgba32(255, 255, 255));
+                        ballX,
+                        ballY);
                 }
                 else
                 {
-                    DrawCircle(
+                    DrawSaveEffect(
                         image,
-                        x, 42,
-                        15,
-                        3,
-                        new Rgba32(255, 255, 255));
+                        ballX,
+                        ballY);
                 }
             }
 
-            for (int i = 0;
-                 i < Math.Min(
-                     player.Goals,
-                     ShotsPerPlayer);
-                 i++)
-            {
-                int x =
-                    390 + i * 55;
+            /*
+             * إطار علوي
+             */
+            DrawRect(
+                image,
+                20,
+                20,
+                width - 40,
+                90,
+                new Rgba32(
+                    255,
+                    255,
+                    255,
+                    255),
+                3);
 
-                FillCircle(
-                    image,
-                    x, 95,
-                    9,
-                    new Rgba32(255, 215, 0));
-            }
+            /*
+             * لأننا لا نستخدم Drawing/Fonts هنا،
+             * لا نعتمد على DrawText.
+             *
+             * معلومات اللاعب تُرسل أيضاً كنص في الرسالة.
+             */
 
-            using var stream =
+            using MemoryStream stream =
                 new MemoryStream();
 
             image.Save(
@@ -1277,158 +1269,264 @@ namespace PenaltyBot
             return stream.ToArray();
         }
 
+        // =========================================================
+        // GOAL
+        // =========================================================
+
         private static void DrawGoal(
             Image<Rgba32> image)
         {
             Rgba32 white =
-                new Rgba32(245, 245, 245);
+                new Rgba32(
+                    255,
+                    255,
+                    255,
+                    255);
 
-            DrawLine(image, 320, 110, 680, 110, 8, white);
-            DrawLine(image, 320, 110, 320, 250, 8, white);
-            DrawLine(image, 680, 110, 680, 250, 8, white);
+            int x = 300;
+            int y = 150;
+            int w = 300;
+            int h = 220;
 
-            for (int x = 340; x < 680; x += 30)
+            DrawRect(
+                image,
+                x,
+                y,
+                w,
+                h,
+                white,
+                8);
+
+            for (int i = 0; i <= 6; i++)
             {
+                int gx =
+                    x +
+                    (i * w / 6);
+
                 DrawLine(
                     image,
-                    x, 115,
-                    x, 245,
-                    1,
-                    new Rgba32(220, 220, 220));
+                    gx,
+                    y,
+                    gx,
+                    y + h,
+                    new Rgba32(
+                        220,
+                        220,
+                        220,
+                        255),
+                    2);
             }
 
-            for (int y = 130; y < 250; y += 25)
+            for (int i = 0; i <= 5; i++)
             {
+                int gy =
+                    y +
+                    (i * h / 5);
+
                 DrawLine(
                     image,
-                    325, y,
-                    675, y,
-                    1,
-                    new Rgba32(220, 220, 220));
+                    x,
+                    gy,
+                    x + w,
+                    gy,
+                    new Rgba32(
+                        220,
+                        220,
+                        220,
+                        255),
+                    2);
             }
         }
 
+        // =========================================================
+        // KEEPER
+        // =========================================================
+
         private static void DrawKeeper(
-            Image<Rgba32> image,
-            int x,
-            int y)
+            Image<Rgba32> image)
         {
-            Rgba32 skin =
-                new Rgba32(230, 175, 135);
-
-            Rgba32 shirt =
-                new Rgba32(30, 80, 180);
-
-            Rgba32 pants =
-                new Rgba32(25, 25, 35);
-
-            FillCircle(
-                image,
-                x, y - 55,
-                25,
-                skin);
+            Rgba32 color =
+                new Rgba32(
+                    20,
+                    80,
+                    180,
+                    255);
 
             FillRect(
                 image,
-                x - 28,
-                y - 30,
-                56,
-                80,
-                shirt);
-
-            DrawLine(
-                image,
-                x - 20, y - 15,
-                x - 75, y - 45,
-                15,
-                shirt);
-
-            DrawLine(
-                image,
-                x + 20, y - 15,
-                x + 75, y - 45,
-                15,
-                shirt);
+                425,
+                260,
+                50,
+                100,
+                color);
 
             FillCircle(
                 image,
-                x - 78, y - 47,
-                12,
-                new Rgba32(240, 210, 50));
-
-            FillCircle(
-                image,
-                x + 78, y - 47,
-                12,
-                new Rgba32(240, 210, 50));
-
-            DrawLine(
-                image,
-                x - 15, y + 45,
-                x - 45, y + 100,
-                18,
-                pants);
+                450,
+                240,
+                25,
+                new Rgba32(
+                    230,
+                    180,
+                    140,
+                    255));
 
             DrawLine(
                 image,
-                x + 15, y + 45,
-                x + 45, y + 100,
-                18,
-                pants);
+                430,
+                280,
+                380,
+                330,
+                color,
+                12);
+
+            DrawLine(
+                image,
+                470,
+                280,
+                520,
+                330,
+                color,
+                12);
+
+            DrawLine(
+                image,
+                440,
+                355,
+                410,
+                405,
+                color,
+                12);
+
+            DrawLine(
+                image,
+                460,
+                355,
+                490,
+                405,
+                color,
+                12);
         }
+
+        // =========================================================
+        // GOAL EFFECT
+        // =========================================================
 
         private static void DrawGoalEffect(
             Image<Rgba32> image,
             int x,
             int y)
         {
-            Rgba32 yellow =
-                new Rgba32(255, 220, 30);
+            Rgba32 color =
+                new Rgba32(
+                    255,
+                    220,
+                    0,
+                    255);
 
-            for (int i = 0; i < 12; i++)
-            {
-                double angle =
-                    i * Math.PI * 2 / 12;
+            DrawCircle(
+                image,
+                x,
+                y,
+                35,
+                color,
+                5);
 
-                int x2 =
-                    x +
-                    (int)(Math.Cos(angle) * 60);
+            DrawCircle(
+                image,
+                x,
+                y,
+                50,
+                new Rgba32(
+                    255,
+                    140,
+                    0,
+                    255),
+                3);
 
-                int y2 =
-                    y +
-                    (int)(Math.Sin(angle) * 60);
+            DrawLine(
+                image,
+                x - 65,
+                y,
+                x - 35,
+                y,
+                color,
+                5);
 
-                DrawLine(
-                    image,
-                    x, y,
-                    x2, y2,
-                    5,
-                    yellow);
-            }
+            DrawLine(
+                image,
+                x + 35,
+                y,
+                x + 65,
+                y,
+                color,
+                5);
+
+            DrawLine(
+                image,
+                x,
+                y - 65,
+                x,
+                y - 35,
+                color,
+                5);
+
+            DrawLine(
+                image,
+                x,
+                y + 35,
+                x,
+                y + 65,
+                color,
+                5);
         }
+
+        // =========================================================
+        // SAVE EFFECT
+        // =========================================================
 
         private static void DrawSaveEffect(
             Image<Rgba32> image,
             int x,
             int y)
         {
-            Rgba32 red =
-                new Rgba32(230, 50, 50);
+            Rgba32 color =
+                new Rgba32(
+                    220,
+                    30,
+                    30,
+                    255);
+
+            DrawCircle(
+                image,
+                x,
+                y,
+                35,
+                color,
+                5);
 
             DrawLine(
                 image,
-                x - 55, y - 55,
-                x + 55, y + 55,
-                8,
-                red);
+                x - 25,
+                y - 25,
+                x + 25,
+                y + 25,
+                color,
+                7);
 
             DrawLine(
                 image,
-                x + 55, y - 55,
-                x - 55, y + 55,
-                8,
-                red);
+                x + 25,
+                y - 25,
+                x - 25,
+                y + 25,
+                color,
+                7);
         }
+
+        // =========================================================
+        // DRAW RECT
+        // =========================================================
 
         private static void FillRect(
             Image<Rgba32> image,
@@ -1438,9 +1536,6 @@ namespace PenaltyBot
             int height,
             Rgba32 color)
         {
-            int x1 = Math.Max(0, x);
-            int y1 = Math.Max(0, y);
-
             int x2 =
                 Math.Min(
                     image.Width,
@@ -1451,19 +1546,30 @@ namespace PenaltyBot
                     image.Height,
                     y + height);
 
-            if (x1 >= x2 || y1 >= y2)
-                return;
+            int startX =
+                Math.Max(0, x);
+
+            int startY =
+                Math.Max(0, y);
 
             image.ProcessPixelRows(
-                rows =>
+                accessor =>
                 {
-                    for (int yy = y1; yy < y2; yy++)
+                    for (
+                        int yy = startY;
+                        yy < y2;
+                        yy++)
                     {
                         Span<Rgba32> row =
-                            rows.GetRowSpan(yy);
+                            accessor.GetRowSpan(yy);
 
-                        for (int xx = x1; xx < x2; xx++)
+                        for (
+                            int xx = startX;
+                            xx < x2;
+                            xx++)
+                        {
                             row[xx] = color;
+                        }
                     }
                 });
         }
@@ -1474,13 +1580,15 @@ namespace PenaltyBot
             int y,
             int width,
             int height,
-            int thickness,
-            Rgba32 color)
+            Rgba32 color,
+            int thickness)
         {
             FillRect(
                 image,
-                x, y,
-                width, thickness,
+                x,
+                y,
+                width,
+                thickness,
                 color);
 
             FillRect(
@@ -1493,7 +1601,8 @@ namespace PenaltyBot
 
             FillRect(
                 image,
-                x, y,
+                x,
+                y,
                 thickness,
                 height,
                 color);
@@ -1507,106 +1616,125 @@ namespace PenaltyBot
                 color);
         }
 
+        // =========================================================
+        // LINE
+        // =========================================================
+
         private static void DrawLine(
             Image<Rgba32> image,
             int x1,
             int y1,
             int x2,
             int y2,
-            int thickness,
-            Rgba32 color)
+            Rgba32 color,
+            int thickness)
         {
-            int dx = Math.Abs(x2 - x1);
-            int dy = Math.Abs(y2 - y1);
+            int dx =
+                Math.Abs(x2 - x1);
 
-            int sx = x1 < x2 ? 1 : -1;
-            int sy = y1 < y2 ? 1 : -1;
+            int sx =
+                x1 < x2 ? 1 : -1;
 
-            int err = dx - dy;
+            int dy =
+                -Math.Abs(y2 - y1);
 
-            int x = x1;
-            int y = y1;
+            int sy =
+                y1 < y2 ? 1 : -1;
+
+            int err =
+                dx + dy;
 
             while (true)
             {
                 FillCircle(
                     image,
-                    x,
-                    y,
+                    x1,
+                    y1,
                     Math.Max(1, thickness / 2),
                     color);
 
-                if (x == x2 && y == y2)
+                if (
+                    x1 == x2 &&
+                    y1 == y2)
                     break;
 
-                int e2 = 2 * err;
+                int e2 =
+                    2 * err;
 
-                if (e2 > -dy)
+                if (e2 >= dy)
                 {
-                    err -= dy;
-                    x += sx;
+                    err += dy;
+                    x1 += sx;
                 }
 
-                if (e2 < dx)
+                if (e2 <= dx)
                 {
                     err += dx;
-                    y += sy;
+                    y1 += sy;
                 }
             }
         }
 
+        // =========================================================
+        // CIRCLE
+        // =========================================================
+
         private static void FillCircle(
             Image<Rgba32> image,
-            int centerX,
-            int centerY,
+            int cx,
+            int cy,
             int radius,
             Rgba32 color)
         {
-            int radiusSquared =
+            int r2 =
                 radius * radius;
 
-            int minX =
-                Math.Max(
-                    0,
-                    centerX - radius);
-
-            int maxX =
-                Math.Min(
-                    image.Width - 1,
-                    centerX + radius);
-
-            int minY =
-                Math.Max(
-                    0,
-                    centerY - radius);
-
-            int maxY =
-                Math.Min(
-                    image.Height - 1,
-                    centerY + radius);
-
             image.ProcessPixelRows(
-                rows =>
+                accessor =>
                 {
-                    for (int y = minY; y <= maxY; y++)
+                    int minY =
+                        Math.Max(
+                            0,
+                            cy - radius);
+
+                    int maxY =
+                        Math.Min(
+                            image.Height - 1,
+                            cy + radius);
+
+                    for (
+                        int y = minY;
+                        y <= maxY;
+                        y++)
                     {
-                        int dy =
-                            y - centerY;
-
                         Span<Rgba32> row =
-                            rows.GetRowSpan(y);
+                            accessor.GetRowSpan(y);
 
-                        for (int x = minX; x <= maxX; x++)
+                        int dy =
+                            y - cy;
+
+                        int dx =
+                            (int)Math.Sqrt(
+                                Math.Max(
+                                    0,
+                                    r2 - dy * dy));
+
+                        int minX =
+                            Math.Max(
+                                0,
+                                cx - dx);
+
+                        int maxX =
+                            Math.Min(
+                                image.Width - 1,
+                                cx + dx);
+
+                        for (
+                            int x = minX;
+                            x <= maxX;
+                            x++)
                         {
-                            int dx =
-                                x - centerX;
-
-                            if (dx * dx +
-                                dy * dy <=
-                                radiusSquared)
-                            {
-                                row[x] = color;
-                            }
+                            row[x] = color;
                         }
                     }
                 });
@@ -1614,67 +1742,72 @@ namespace PenaltyBot
 
         private static void DrawCircle(
             Image<Rgba32> image,
-            int centerX,
-            int centerY,
+            int cx,
+            int cy,
             int radius,
-            int thickness,
-            Rgba32 color)
+            Rgba32 color,
+            int thickness)
         {
-            int outer = radius;
-
             int inner =
                 Math.Max(
                     0,
                     radius - thickness);
 
-            int outerSquared =
-                outer * outer;
+            int outer2 =
+                radius * radius;
 
-            int innerSquared =
+            int inner2 =
                 inner * inner;
 
-            int minX =
-                Math.Max(
-                    0,
-                    centerX - outer);
-
-            int maxX =
-                Math.Min(
-                    image.Width - 1,
-                    centerX + outer);
-
-            int minY =
-                Math.Max(
-                    0,
-                    centerY - outer);
-
-            int maxY =
-                Math.Min(
-                    image.Height - 1,
-                    centerY + outer);
-
             image.ProcessPixelRows(
-                rows =>
+                accessor =>
                 {
-                    for (int y = minY; y <= maxY; y++)
+                    int minY =
+                        Math.Max(
+                            0,
+                            cy - radius);
+
+                    int maxY =
+                        Math.Min(
+                            image.Height - 1,
+                            cy + radius);
+
+                    for (
+                        int y = minY;
+                        y <= maxY;
+                        y++)
                     {
-                        int dy =
-                            y - centerY;
-
                         Span<Rgba32> row =
-                            rows.GetRowSpan(y);
+                            accessor.GetRowSpan(y);
 
-                        for (int x = minX; x <= maxX; x++)
+                        int dy =
+                            y - cy;
+
+                        int minX =
+                            Math.Max(
+                                0,
+                                cx - radius);
+
+                        int maxX =
+                            Math.Min(
+                                image.Width - 1,
+                                cx + radius);
+
+                        for (
+                            int x = minX;
+                            x <= maxX;
+                            x++)
                         {
                             int dx =
-                                x - centerX;
+                                x - cx;
 
                             int distance =
                                 dx * dx +
                                 dy * dy;
 
-                            if (distance <= outerSquared &&
-                                distance >= innerSquared)
+                            if (
+                                distance <= outer2 &&
+                                distance >= inner2)
                             {
                                 row[x] = color;
                             }
@@ -1683,30 +1816,53 @@ namespace PenaltyBot
                 });
         }
 
+        // =========================================================
+        // SEND MESSAGE
+        // =========================================================
+
         private static async Task SendMessage(
             string groupId,
-            string message)
+            string text)
         {
             try
             {
                 if (_client == null)
+                {
+                    Console.WriteLine(
+                        "MESSAGE ERROR: client is null");
+
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(groupId))
                     return;
 
-                await _client.Message(
+                if (text == null)
+                    text = "";
+
+                Console.WriteLine(
+                    $"SEND MESSAGE | Group={groupId}");
+
+                Console.WriteLine(
+                    text);
+
+                await _client.GroupMessage(
                     groupId,
-                    message);
+                    text);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(
-                    "Send Message Error: " +
-                    ex.Message);
+                    "SEND MESSAGE ERROR:");
+
+                Console.WriteLine(ex);
             }
         }
 
-        // ================================
-        // إرسال الصور - الطريقة الصحيحة
-        // ================================
+        // =========================================================
+        // SEND IMAGE
+        // =========================================================
+
         private static async Task SendImage(
             string groupId,
             byte[] imageBytes)
@@ -1717,6 +1873,7 @@ namespace PenaltyBot
                 {
                     Console.WriteLine(
                         "IMAGE ERROR: client is null");
+
                     return;
                 }
 
@@ -1725,6 +1882,7 @@ namespace PenaltyBot
                 {
                     Console.WriteLine(
                         "IMAGE ERROR: image is empty");
+
                     return;
                 }
 
@@ -1735,12 +1893,22 @@ namespace PenaltyBot
                     "IMAGE TEST");
 
                 Console.WriteLine(
-                    "Group: " + groupId);
+                    "Group: " +
+                    groupId);
 
                 Console.WriteLine(
-                    "Bytes: " + imageBytes.Length);
+                    "Bytes: " +
+                    imageBytes.Length);
 
-                // الطريقة الصحيحة لإرسال صورة في WolfLive.Api
+                /*
+                 * الطريقة الصحيحة لإرسال صورة
+                 * في WolfLive.Api:
+                 *
+                 * GroupMessage(groupId, byte[])
+                 *
+                 * والـ API يتعامل معها كـ image/jpeg.
+                 */
+
                 var result =
                     await _client.GroupMessage(
                         groupId,
@@ -1750,146 +1918,5 @@ namespace PenaltyBot
                     "IMAGE SENT!");
 
                 Console.WriteLine(
-                    "Response: " + result);
-
-                Console.WriteLine(
-                    "================================");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(
-                    "IMAGE SEND ERROR:");
-
-                Console.WriteLine(
-                    ex.ToString());
-            }
-        }
-
-        private static string GetMessageText(
-            object message)
-        {
-            return GetStringProperty(
-                message,
-                "Text",
-                "Message",
-                "Content",
-                "Body")
-                ?? "";
-        }
-
-        private static string GetGroupId(
-            object message)
-        {
-            string? value =
-                GetStringProperty(
-                    message,
-                    "GroupId",
-                    "RoomId",
-                    "ChatId",
-                    "ChannelId",
-                    "ConversationId");
-
-            return value ?? "";
-        }
-
-        private static string GetUserId(
-            object message)
-        {
-            string? value =
-                GetStringProperty(
-                    message,
-                    "UserId",
-                    "SenderId",
-                    "FromId",
-                    "AuthorId");
-
-            return value ?? "";
-        }
-
-        private static string GetUserName(
-            object message)
-        {
-            string? value =
-                GetStringProperty(
-                    message,
-                    "UserName",
-                    "SenderName",
-                    "FromName",
-                    "AuthorName",
-                    "Name");
-
-            if (!string.IsNullOrWhiteSpace(value))
-                return value;
-
-            foreach (string propertyName in new[]
-            {
-                "Sender",
-                "User",
-                "Author",
-                "From"
-            })
-            {
-                try
-                {
-                    PropertyInfo? property =
-                        message.GetType()
-                            .GetProperty(
-                                propertyName,
-                                BindingFlags.Public |
-                                BindingFlags.Instance |
-                                BindingFlags.IgnoreCase);
-
-                    object? obj =
-                        property?.GetValue(message);
-
-                    if (obj != null)
-                    {
-                        string? nested =
-                            GetStringProperty(
-                                obj,
-                                "Name",
-                                "UserName",
-                                "DisplayName");
-
-                        if (!string.IsNullOrWhiteSpace(nested))
-                            return nested;
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            return "لاعب";
-        }
-
-        private static string? GetStringProperty(
-            object obj,
-            params string[] propertyNames)
-        {
-            foreach (string name in propertyNames)
-            {
-                try
-                {
-                    PropertyInfo? property =
-                        obj.GetType()
-                            .GetProperty(
-                                name,
-                                BindingFlags.Public |
-                                BindingFlags.Instance |
-                                BindingFlags.IgnoreCase);
-
-                    if (property == null)
-                        continue;
-
-                    object? value =
-                        property.GetValue(obj);
-
-                    if (value == null)
-                        continue;
-
-                    string result =
-                        value.ToString() ?? "";
-
-                    if (!string.IsNullOrWhiteSpace(result))
-                        re
+                    "Response: " +
+                    result)
