@@ -4,12 +4,15 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+
 using WolfLive.Api;
 using WolfLive.Api.Models;
+
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using SixLabors.Fonts;
 
 namespace PenaltyBot
@@ -74,7 +77,9 @@ namespace PenaltyBot
             if (string.IsNullOrWhiteSpace(email) ||
                 string.IsNullOrWhiteSpace(password))
             {
-                Console.WriteLine("WOLF_EMAIL أو WOLF_PASSWORD غير موجود.");
+                Console.WriteLine(
+                    "WOLF_EMAIL أو WOLF_PASSWORD غير موجود.");
+
                 return;
             }
 
@@ -82,20 +87,22 @@ namespace PenaltyBot
             {
                 Client = new WolfClient();
 
-                // مهم جداً:
-                // الاشتراك باستقبال الرسائل قبل تسجيل الدخول
                 Client.Messaging.OnMessage += OnMessage;
 
-                Console.WriteLine("تم تشغيل مستمع الرسائل.");
+                Console.WriteLine(
+                    "تم تشغيل مستمع الرسائل.");
 
-                await Client.Login(email, password);
+                await Client.Login(
+                    email,
+                    password);
 
                 Console.WriteLine("====================================");
                 Console.WriteLine("البوت متصل بوف بنجاح.");
                 Console.WriteLine("بانتظار الأوامر...");
                 Console.WriteLine("====================================");
 
-                await Task.Delay(Timeout.Infinite);
+                await Task.Delay(
+                    Timeout.Infinite);
             }
             catch (Exception ex)
             {
@@ -110,8 +117,11 @@ namespace PenaltyBot
         {
             try
             {
-                string? groupId = GetGroupId(message);
-                string text = GetMessageText(message);
+                string? groupId =
+                    GetGroupId(message);
+
+                string text =
+                    GetMessageText(message);
 
                 if (string.IsNullOrWhiteSpace(groupId))
                     return;
@@ -124,17 +134,22 @@ namespace PenaltyBot
                 Console.WriteLine(
                     $"[MESSAGE] Room={groupId} Text={text}");
 
-                if (!text.StartsWith("!جزاء",
+                // الأرقام أثناء اللعب
+                if (text == "1" ||
+                    text == "2" ||
+                    text == "3")
+                {
+                    await ProcessShot(
+                        groupId,
+                        text);
+
+                    return;
+                }
+
+                if (!text.StartsWith(
+                    "!جزاء",
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    // أثناء اللعب نقبل 1 / 2 / 3
-                    if (text == "1" ||
-                        text == "2" ||
-                        text == "3")
-                    {
-                        await ProcessShot(groupId, text);
-                    }
-
                     return;
                 }
 
@@ -184,7 +199,10 @@ namespace PenaltyBot
                     "انضم",
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    await JoinGame(groupId, message);
+                    await JoinGame(
+                        groupId,
+                        message);
+
                     return;
                 }
 
@@ -193,6 +211,7 @@ namespace PenaltyBot
                     StringComparison.OrdinalIgnoreCase))
                 {
                     await ShowPlayers(groupId);
+
                     return;
                 }
 
@@ -201,6 +220,7 @@ namespace PenaltyBot
                     StringComparison.OrdinalIgnoreCase))
                 {
                     await StartGame(groupId);
+
                     return;
                 }
 
@@ -209,6 +229,7 @@ namespace PenaltyBot
                     StringComparison.OrdinalIgnoreCase))
                 {
                     await ShowStatus(groupId);
+
                     return;
                 }
 
@@ -217,6 +238,7 @@ namespace PenaltyBot
                     StringComparison.OrdinalIgnoreCase))
                 {
                     await EndGame(groupId);
+
                     return;
                 }
 
@@ -232,7 +254,8 @@ namespace PenaltyBot
 
                 try
                 {
-                    string? groupId = GetGroupId(message);
+                    string? groupId =
+                        GetGroupId(message);
 
                     if (!string.IsNullOrWhiteSpace(groupId))
                     {
@@ -251,8 +274,11 @@ namespace PenaltyBot
             string groupId,
             Message message)
         {
-            string userId = GetUserId(message);
-            string name = GetUserName(message);
+            string userId =
+                GetUserId(message);
+
+            string name =
+                GetUserName(message);
 
             if (string.IsNullOrWhiteSpace(userId))
                 userId = name;
@@ -309,10 +335,18 @@ namespace PenaltyBot
                     });
             }
 
+            int count;
+
+            lock (GameLock)
+            {
+                count =
+                    Games[groupId].Players.Count;
+            }
+
             await Send(
                 groupId,
                 $"✅ تم انضمام {name}\n" +
-                $"👥 عدد اللاعبين: {Games[groupId].Players.Count}/10\n\n" +
+                $"👥 عدد اللاعبين: {count}/10\n\n" +
                 "اكتب !جزاء بدء عندما يكتمل اللعب.");
         }
 
@@ -338,17 +372,19 @@ namespace PenaltyBot
                 return;
             }
 
-            var lines = new List<string>
-            {
-                "⚽ لاعبو ركلات الجزاء:",
-                ""
-            };
+            var lines =
+                new List<string>
+                {
+                    "⚽ لاعبو ركلات الجزاء:",
+                    ""
+                };
 
             for (int i = 0;
                 i < game.Players.Count;
                 i++)
             {
-                var p = game.Players[i];
+                var p =
+                    game.Players[i];
 
                 lines.Add(
                     $"{i + 1}. {p.Name} — " +
@@ -357,7 +393,9 @@ namespace PenaltyBot
 
             await Send(
                 groupId,
-                string.Join("\n", lines));
+                string.Join(
+                    "\n",
+                    lines));
         }
 
         private static async Task StartGame(
@@ -372,7 +410,13 @@ namespace PenaltyBot
                     out game);
 
                 if (game == null)
+                {
+                    _ = Send(
+                        groupId,
+                        "❌ لا توجد لعبة. اكتب !جزاء انضم");
+
                     return;
+                }
 
                 if (game.Started)
                 {
@@ -403,6 +447,13 @@ namespace PenaltyBot
 
                 game.Started = true;
                 game.CurrentPlayerIndex = 0;
+
+                foreach (var player in game.Players)
+                {
+                    player.Shots = 0;
+                    player.Goals = 0;
+                    player.Saves = 0;
+                }
             }
 
             await Send(
@@ -435,6 +486,7 @@ namespace PenaltyBot
                 {
                     game.Started = false;
                     game.CurrentPlayerIndex = -1;
+
                     return;
                 }
 
@@ -454,7 +506,8 @@ namespace PenaltyBot
 
             lock (GameLock)
             {
-                player = game!.CurrentPlayer;
+                player =
+                    game!.CurrentPlayer;
             }
 
             if (player == null)
@@ -537,6 +590,8 @@ namespace PenaltyBot
             string userId)
         {
             PenaltyGame? game;
+            string name = "اللاعب";
+            bool shouldContinue = false;
 
             lock (GameLock)
             {
@@ -555,7 +610,7 @@ namespace PenaltyBot
                 if (index < 0)
                     return;
 
-                string name =
+                name =
                     game.Players[index].Name;
 
                 game.Players.RemoveAt(index);
@@ -574,42 +629,53 @@ namespace PenaltyBot
                     return;
                 }
 
-                if (index <= game.CurrentPlayerIndex)
+                if (index < game.CurrentPlayerIndex)
+                {
                     game.CurrentPlayerIndex--;
+                }
+                else if (index == game.CurrentPlayerIndex)
+                {
+                    if (game.CurrentPlayerIndex >=
+                        game.Players.Count)
+                    {
+                        game.CurrentPlayerIndex = 0;
+                    }
+                }
 
                 if (game.CurrentPlayerIndex < 0)
-                    game.CurrentPlayerIndex =
-                        game.Players.Count - 1;
-
-                if (game.CurrentPlayerIndex >= game.Players.Count)
+                {
                     game.CurrentPlayerIndex = 0;
+                }
 
                 game.TurnCancellation?.Cancel();
+
+                shouldContinue = true;
             }
 
             await Send(
                 groupId,
                 $"⏰ انتهى الوقت!\n\n" +
-                $"❌ {GetPlayerName(groupId, userId)} " +
-                "لم يسدد خلال 25 ثانية.\n" +
+                $"❌ {name} لم يسدد خلال 25 ثانية.\n" +
                 "تم استبعاده من اللعبة فقط.\n" +
                 "🚫 لم يتم طرده من الروم.");
 
-            await MoveToNextPlayer(groupId);
+            if (shouldContinue)
+            {
+                await StartTurn(groupId);
+            }
         }
 
         private static async Task ProcessShot(
             string groupId,
             string directionText)
         {
-            int direction;
-
             if (!int.TryParse(
                 directionText,
-                out direction))
+                out int direction))
                 return;
 
-            if (direction < 1 || direction > 3)
+            if (direction < 1 ||
+                direction > 3)
                 return;
 
             PenaltyGame? game;
@@ -629,7 +695,8 @@ namespace PenaltyBot
 
             lock (GameLock)
             {
-                player = game!.CurrentPlayer;
+                player =
+                    game!.CurrentPlayer;
 
                 if (player == null)
                     return;
@@ -658,8 +725,9 @@ namespace PenaltyBot
                     game.CurrentPlayerIndex >= game.Players.Count)
                     return;
 
-                player = game.Players[
-                    game.CurrentPlayerIndex];
+                player =
+                    game.Players[
+                        game.CurrentPlayerIndex];
 
                 if (player.Shots >= 5)
                     return;
@@ -681,7 +749,9 @@ namespace PenaltyBot
                 GetDirectionName(keeperDirection);
 
             string result =
-                goal ? "⚽ GOAL!" : "🧤 SAVE!";
+                goal
+                    ? "⚽ GOAL!"
+                    : "🧤 SAVE!";
 
             await Send(
                 groupId,
@@ -692,10 +762,7 @@ namespace PenaltyBot
                 $"⚽ الأهداف: {player.Goals}\n" +
                 $"🎯 الركلات: {player.Shots}");
 
-            // ==========================================
             // إنشاء الصورة
-            // ==========================================
-
             byte[] imageBytes =
                 CreatePenaltyImage(
                     player.Name,
@@ -708,10 +775,7 @@ namespace PenaltyBot
             Console.WriteLine(
                 $"[IMAGE CREATE] JPEG = {imageBytes.Length} bytes");
 
-            // ==========================================
-            // إرسال الصورة بالطريقة المباشرة
-            // ==========================================
-
+            // إرسال الصورة
             try
             {
                 var response =
@@ -762,7 +826,8 @@ namespace PenaltyBot
 
             lock (GameLock)
             {
-                player = game!.CurrentPlayer;
+                player =
+                    game!.CurrentPlayer;
             }
 
             if (player == null)
@@ -798,6 +863,8 @@ namespace PenaltyBot
                 if (game.Players.Count == 0)
                 {
                     game.Started = false;
+                    game.CurrentPlayerIndex = -1;
+
                     return;
                 }
 
@@ -843,8 +910,13 @@ namespace PenaltyBot
                 return;
             }
 
-            var current =
-                game.CurrentPlayer;
+            PenaltyPlayer? current;
+
+            lock (GameLock)
+            {
+                current =
+                    game.CurrentPlayer;
+            }
 
             string text =
                 "⚽ حالة اللعبة\n\n" +
@@ -877,13 +949,16 @@ namespace PenaltyBot
                     return;
 
                 game.Started = false;
+
                 game.TurnCancellation?.Cancel();
             }
 
             var ranking =
                 game!.Players
-                    .OrderByDescending(x => x.Goals)
-                    .ThenByDescending(x => x.Shots)
+                    .OrderByDescending(
+                        x => x.Goals)
+                    .ThenByDescending(
+                        x => x.Shots)
                     .ToList();
 
             string result =
@@ -893,7 +968,8 @@ namespace PenaltyBot
                 i < ranking.Count;
                 i++)
             {
-                var p = ranking[i];
+                var p =
+                    ranking[i];
 
                 string medal =
                     i == 0 ? "🥇" :
@@ -921,7 +997,13 @@ namespace PenaltyBot
                 if (!Games.TryGetValue(
                     groupId,
                     out game))
+                {
+                    _ = Send(
+                        groupId,
+                        "❌ لا توجد لعبة حالياً.");
+
                     return;
+                }
 
                 game.TurnCancellation?.Cancel();
 
@@ -974,7 +1056,7 @@ namespace PenaltyBot
                     width,
                     height);
 
-            // خلفية
+            // الخلفية والملعب
             image.Mutate(ctx =>
             {
                 ctx.Fill(
@@ -1027,7 +1109,7 @@ namespace PenaltyBot
                         500,
                         290));
 
-                // القائمين
+                // القائم الأيسر
                 ctx.Fill(
                     Color.White,
                     new Rectangle(
@@ -1036,6 +1118,7 @@ namespace PenaltyBot
                         15,
                         290));
 
+                // القائم الأيمن
                 ctx.Fill(
                     Color.White,
                     new Rectangle(
@@ -1061,8 +1144,12 @@ namespace PenaltyBot
                     ctx.DrawLine(
                         Color.LightGray,
                         1,
-                        new PointF(x, 115),
-                        new PointF(x, 385));
+                        new PointF(
+                            x,
+                            115),
+                        new PointF(
+                            x,
+                            385));
                 }
 
                 for (int y = 140;
@@ -1072,17 +1159,23 @@ namespace PenaltyBot
                     ctx.DrawLine(
                         Color.LightGray,
                         1,
-                        new PointF(265, y),
-                        new PointF(735, y));
+                        new PointF(
+                            265,
+                            y),
+                        new PointF(
+                            735,
+                            y));
                 }
 
-                // الحارس
+                // مكان الحارس
                 float keeperX =
-                    keeperDirection == 1 ? 330 :
-                    keeperDirection == 2 ? 490 :
-                    630;
+                    keeperDirection == 1
+                        ? 330
+                        : keeperDirection == 2
+                            ? 490
+                            : 630;
 
-                // جسم الحارس
+                // رأس الحارس
                 ctx.Fill(
                     Color.Red,
                     new EllipsePolygon(
@@ -1091,6 +1184,7 @@ namespace PenaltyBot
                             210),
                         48));
 
+                // جسم الحارس
                 ctx.Fill(
                     Color.Red,
                     new RectangleF(
@@ -1143,12 +1237,16 @@ namespace PenaltyBot
 
                 // الكرة
                 float ballX =
-                    shotDirection == 1 ? 320 :
-                    shotDirection == 2 ? 500 :
-                    680;
+                    shotDirection == 1
+                        ? 320
+                        : shotDirection == 2
+                            ? 500
+                            : 680;
 
                 float ballY =
-                    goal ? 180 : 285;
+                    goal
+                        ? 180
+                        : 285;
 
                 ctx.Fill(
                     Color.White,
@@ -1190,7 +1288,9 @@ namespace PenaltyBot
                         FontStyle.Regular);
 
                 string title =
-                    goal ? "GOAL!" : "SAVE!";
+                    goal
+                        ? "GOAL!"
+                        : "SAVE!";
 
                 string direction =
                     GetDirectionName(
@@ -1203,7 +1303,8 @@ namespace PenaltyBot
                 image.Mutate(ctx =>
                 {
                     var titleOptions =
-                        new RichTextOptions(titleFont)
+                        new RichTextOptions(
+                            titleFont)
                         {
                             Origin =
                                 new PointF(
@@ -1332,7 +1433,8 @@ namespace PenaltyBot
                     message.GetType();
 
                 var prop =
-                    type.GetProperty("GroupId");
+                    type.GetProperty(
+                        "GroupId");
 
                 if (prop != null)
                 {
@@ -1345,7 +1447,8 @@ namespace PenaltyBot
                 }
 
                 prop =
-                    type.GetProperty("RecipientId");
+                    type.GetProperty(
+                        "RecipientId");
 
                 if (prop != null)
                 {
@@ -1358,7 +1461,8 @@ namespace PenaltyBot
                 }
 
                 prop =
-                    type.GetProperty("RoomId");
+                    type.GetProperty(
+                        "RoomId");
 
                 if (prop != null)
                 {
