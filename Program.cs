@@ -59,6 +59,7 @@ namespace PenaltyBot
     {
         private static IWolfClient? Client;
 
+        // لعبة مستقلة لكل روم
         private static readonly Dictionary<string, PenaltyGame> Games =
             new Dictionary<string, PenaltyGame>();
 
@@ -69,15 +70,16 @@ namespace PenaltyBot
         private const int MaxPlayers = 10;
         private const int MinPlayers = 2;
 
+        // كل لاعب عنده 5 تسديدات
         private const int ShotsPerPlayer = 5;
 
-        // مدة الدور 25 ثانية
+        // 25 ثانية لكل دور
         private const int TurnSeconds = 25;
 
         public static async Task Main(string[] args)
         {
             Console.WriteLine("================================");
-            Console.WriteLine("       PENALTY BOT");
+            Console.WriteLine("         PENALTY BOT");
             Console.WriteLine("================================");
 
             string? email =
@@ -111,7 +113,8 @@ namespace PenaltyBot
 
             Client.OnConnected += c =>
             {
-                Console.WriteLine("[WOLF] Connected");
+                Console.WriteLine(
+                    "[WOLF] Connected");
             };
 
             Client.OnDisconnected += (c, reason) =>
@@ -133,25 +136,42 @@ namespace PenaltyBot
             };
 
             // مهم جداً:
-            // نربط استقبال الرسائل قبل تسجيل الدخول
-            // حتى يستقبل الأوامر من جميع الرومات.
+            // تسجيل استقبال الرسائل قبل Login
+            // حتى يستقبل البوت أوامر جميع الرومات
             Client.Messaging.OnMessage += OnMessage;
 
             bool login =
-                await Client.Login(email, password);
+                await Client.Login(
+                    email,
+                    password);
 
             if (!login)
             {
-                Console.WriteLine("[WOLF] Login Failed!");
+                Console.WriteLine(
+                    "[WOLF] Login Failed!");
+
                 return;
             }
 
-            Console.WriteLine("[WOLF] Login Success!");
-            Console.WriteLine("[WOLF] Listening to ALL ROOMS");
-            Console.WriteLine("[WOLF] Turn Time = 25 Seconds");
+            Console.WriteLine(
+                "[WOLF] Login Success!");
 
-            await Task.Delay(Timeout.Infinite);
+            Console.WriteLine(
+                "[WOLF] Listening to ALL ROOMS");
+
+            Console.WriteLine(
+                "[WOLF] Turn Time = 25 Seconds");
+
+            Console.WriteLine(
+                "[WOLF] Penalty Image = ENABLED");
+
+            await Task.Delay(
+                Timeout.Infinite);
         }
+
+        // =========================================================
+        // استقبال الرسائل
+        // =========================================================
 
         private static async void OnMessage(
             IWolfClient client,
@@ -171,93 +191,111 @@ namespace PenaltyBot
                 if (string.IsNullOrWhiteSpace(text))
                     return;
 
-                string groupId = message.GroupId;
-                string userId = message.UserId;
+                string groupId =
+                    message.GroupId;
+
+                string userId =
+                    message.UserId;
 
                 Console.WriteLine(
-                    $"[MESSAGE] Room={groupId} User={userId} Text={text}");
+                    $"[MESSAGE] Room={groupId} " +
+                    $"User={userId} Text={text}");
 
-                // =========================
+                // =================================================
                 // المساعدة
-                // =========================
+                // =================================================
 
                 if (text.Equals(
                     "!جزاء",
                     StringComparison.OrdinalIgnoreCase) ||
+
                     text.Equals(
-                    "!جزاء مساعدة",
-                    StringComparison.OrdinalIgnoreCase))
+                        "!جزاء مساعدة",
+                        StringComparison.OrdinalIgnoreCase))
                 {
                     await Send(
                         groupId,
+
                         "⚽ لعبة ركلات الجزاء\n\n" +
+
                         "📌 الأوامر:\n" +
                         "!جزاء انضم\n" +
                         "!جزاء لاعبين\n" +
                         "!جزاء بدء\n" +
                         "!جزاء حالة\n" +
                         "!جزاء انهاء\n\n" +
+
                         "🎯 أثناء دورك:\n" +
                         "1️⃣ يسار\n" +
                         "2️⃣ وسط\n" +
                         "3️⃣ يمين\n\n" +
+
                         "⏱️ لديك 25 ثانية للتسديد.\n" +
                         "🚫 انتهاء الوقت = خروج من اللعبة فقط.");
 
                     return;
                 }
 
-                // =========================
-                // انضمام
-                // =========================
+                // =================================================
+                // انضم
+                // =================================================
 
                 if (text.Equals(
                     "!جزاء انضم",
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    await JoinGame(groupId, userId);
+                    await JoinGame(
+                        groupId,
+                        userId);
+
                     return;
                 }
 
-                // =========================
+                // =================================================
                 // اللاعبين
-                // =========================
+                // =================================================
 
                 if (text.Equals(
                     "!جزاء لاعبين",
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    await ShowPlayers(groupId);
+                    await ShowPlayers(
+                        groupId);
+
                     return;
                 }
 
-                // =========================
-                // بدء اللعبة
-                // =========================
+                // =================================================
+                // بدء
+                // =================================================
 
                 if (text.Equals(
                     "!جزاء بدء",
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    await StartGame(groupId);
+                    await StartGame(
+                        groupId);
+
                     return;
                 }
 
-                // =========================
+                // =================================================
                 // الحالة
-                // =========================
+                // =================================================
 
                 if (text.Equals(
                     "!جزاء حالة",
                     StringComparison.OrdinalIgnoreCase))
                 {
-                    await ShowStatus(groupId);
+                    await ShowStatus(
+                        groupId);
+
                     return;
                 }
 
-                // =========================
-                // إنهاء اللعبة
-                // =========================
+                // =================================================
+                // انهاء
+                // =================================================
 
                 if (text.Equals(
                     "!جزاء انهاء",
@@ -270,9 +308,9 @@ namespace PenaltyBot
                     return;
                 }
 
-                // =========================
+                // =================================================
                 // التسديد
-                // =========================
+                // =================================================
 
                 if (text == "1" ||
                     text == "2" ||
@@ -289,12 +327,14 @@ namespace PenaltyBot
             catch (Exception ex)
             {
                 Console.WriteLine(
-                    "[MESSAGE ERROR] " + ex);
+                    "[MESSAGE ERROR]");
+
+                Console.WriteLine(ex);
             }
         }
 
         // =========================================================
-        // انضمام لاعب
+        // انضمام اللاعب
         // =========================================================
 
         private static async Task JoinGame(
@@ -354,7 +394,9 @@ namespace PenaltyBot
                 }
             }
 
-            await Send(groupId, response);
+            await Send(
+                groupId,
+                response);
         }
 
         // =========================================================
@@ -382,7 +424,9 @@ namespace PenaltyBot
                     var lines =
                         new List<string>();
 
-                    lines.Add("⚽ لاعبي لعبة الجزاء:");
+                    lines.Add(
+                        "⚽ لاعبي لعبة الجزاء:");
+
                     lines.Add("");
 
                     foreach (PenaltyPlayer p
@@ -400,11 +444,15 @@ namespace PenaltyBot
                         $"👥 العدد: {game.Players.Count}/{MaxPlayers}");
 
                     response =
-                        string.Join("\n", lines);
+                        string.Join(
+                            "\n",
+                            lines);
                 }
             }
 
-            await Send(groupId, response);
+            await Send(
+                groupId,
+                response);
         }
 
         // =========================================================
@@ -415,6 +463,7 @@ namespace PenaltyBot
             string groupId)
         {
             string response;
+
             bool startTimeout = false;
 
             lock (GameLock)
@@ -442,8 +491,11 @@ namespace PenaltyBot
                     else
                     {
                         game.Started = true;
+
                         game.CurrentPlayerIndex = 0;
+
                         game.WaitingForShot = true;
+
                         game.TurnVersion++;
 
                         PenaltyPlayer? player =
@@ -451,12 +503,16 @@ namespace PenaltyBot
 
                         response =
                             "🏁 بدأت لعبة ركلات الجزاء!\n\n" +
+
                             $"🎯 الدور على: {player?.UserId}\n" +
                             $"🔢 اللاعب رقم {player?.Number}\n\n" +
+
                             "اختر مكان التسديد:\n\n" +
+
                             "1️⃣ يسار\n" +
                             "2️⃣ وسط\n" +
                             "3️⃣ يمين\n\n" +
+
                             "⏱️ لديك 25 ثانية.";
 
                         startTimeout = true;
@@ -464,7 +520,9 @@ namespace PenaltyBot
                 }
             }
 
-            await Send(groupId, response);
+            await Send(
+                groupId,
+                response);
 
             if (startTimeout)
                 StartTimeout(groupId);
@@ -482,9 +540,11 @@ namespace PenaltyBot
             string? response = null;
 
             bool nextTurn = false;
+
             bool finish = false;
 
             int goalkeeper = 0;
+
             bool goal = false;
 
             PenaltyPlayer? playerForImage = null;
@@ -506,6 +566,7 @@ namespace PenaltyBot
                 if (game.CurrentPlayer == null)
                     return;
 
+                // إذا مو دوره
                 if (game.CurrentPlayer.UserId != userId)
                 {
                     response =
@@ -513,6 +574,7 @@ namespace PenaltyBot
                 }
                 else
                 {
+                    // إلغاء المؤقت
                     CancelTimeout(game);
 
                     PenaltyPlayer player =
@@ -522,12 +584,16 @@ namespace PenaltyBot
 
                     player.Shots++;
 
+                    // اختيار مكان الحارس
                     lock (Rng)
                     {
                         goalkeeper =
-                            Rng.Next(1, 4);
+                            Rng.Next(
+                                1,
+                                4);
                     }
 
+                    // إذا مكان التسديدة مختلف عن الحارس = هدف
                     goal =
                         shot != goalkeeper;
 
@@ -535,13 +601,16 @@ namespace PenaltyBot
                         player.Goals++;
 
                     game.WaitingForShot = false;
+
                     game.TurnVersion++;
 
                     string shotDirection =
-                        DirectionName(shot);
+                        DirectionName(
+                            shot);
 
                     string keeperDirection =
-                        DirectionName(goalkeeper);
+                        DirectionName(
+                            goalkeeper);
 
                     string result =
                         goal
@@ -550,20 +619,33 @@ namespace PenaltyBot
 
                     response =
                         $"{result}\n\n" +
+
                         $"🎯 التسديدة: {shotDirection}\n" +
+
                         $"🧤 الحارس: {keeperDirection}\n\n" +
+
                         $"👤 {player.UserId}\n" +
+
                         $"⚽ الأهداف: {player.Goals}\n" +
-                        $"🎯 التسديدات: {player.Shots}/{ShotsPerPlayer}";
+
+                        $"🎯 التسديدات: " +
+                        $"{player.Shots}/{ShotsPerPlayer}";
 
                     if (AllPlayersFinished(game))
+                    {
                         finish = true;
+                    }
                     else
+                    {
                         nextTurn = true;
+                    }
                 }
             }
 
-            // إرسال صورة الركلة
+            // =====================================================
+            // إنشاء الصورة وإرسالها
+            // =====================================================
+
             if (playerForImage != null)
             {
                 try
@@ -577,39 +659,66 @@ namespace PenaltyBot
                             playerForImage.Goals,
                             playerForImage.Shots);
 
-                    await Client!.GroupMessage(
-                        groupId,
-                        image);
+                    Console.WriteLine(
+                        $"[IMAGE] Generated: {image.Length} bytes");
+
+                    if (image.Length > 0)
+                    {
+                        // إرسال الصورة
+                        await Client!.GroupMessage(
+                            groupId,
+                            image);
+
+                        Console.WriteLine(
+                            $"[IMAGE SENT] Room={groupId} " +
+                            $"Bytes={image.Length}");
+                    }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine(
-                        "[IMAGE ERROR] " + ex.Message);
+                        "[IMAGE ERROR]");
+
+                    Console.WriteLine(ex);
                 }
             }
 
+            // إرسال نتيجة النص
             if (!string.IsNullOrWhiteSpace(response))
-                await Send(groupId, response);
+            {
+                await Send(
+                    groupId,
+                    response);
+            }
 
+            // انتهاء اللعبة
             if (finish)
             {
-                await FinishGame(groupId);
+                await FinishGame(
+                    groupId);
+
                 return;
             }
 
+            // الدور التالي
             if (nextTurn)
-                await MoveToNextPlayer(groupId);
+            {
+                await MoveToNextPlayer(
+                    groupId);
+            }
         }
 
         // =========================================================
-        // مؤقت 25 ثانية
+        // بدء مؤقت 25 ثانية
         // =========================================================
 
         private static void StartTimeout(
             string groupId)
         {
             PenaltyGame? game;
+
             int version;
+
             CancellationToken token;
 
             lock (GameLock)
@@ -634,27 +743,31 @@ namespace PenaltyBot
                     game.TurnTimeout.Token;
             }
 
-            _ = Task.Run(async () =>
-            {
-                try
+            _ = Task.Run(
+                async () =>
                 {
-                    await Task.Delay(
-                        TimeSpan.FromSeconds(TurnSeconds),
-                        token);
+                    try
+                    {
+                        await Task.Delay(
+                            TimeSpan.FromSeconds(
+                                TurnSeconds),
+                            token);
 
-                    await TimeoutPlayer(
-                        groupId,
-                        version);
-                }
-                catch (TaskCanceledException)
-                {
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(
-                        "[TIMEOUT ERROR] " + ex);
-                }
-            });
+                        await TimeoutPlayer(
+                            groupId,
+                            version);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(
+                            "[TIMEOUT ERROR]");
+
+                        Console.WriteLine(ex);
+                    }
+                });
         }
 
         // =========================================================
@@ -668,6 +781,7 @@ namespace PenaltyBot
             string response;
 
             bool finish = false;
+
             bool next = false;
 
             lock (GameLock)
@@ -699,16 +813,20 @@ namespace PenaltyBot
                 int removedIndex =
                     game.CurrentPlayerIndex;
 
-                // إخراج اللاعب من اللعبة فقط
+                // إزالة اللاعب من اللعبة فقط
+                // لا يوجد أي Kick من الروم
                 game.Players.RemoveAt(
                     removedIndex);
 
                 game.WaitingForShot = false;
+
                 game.TurnVersion++;
 
                 response =
                     $"⏰ انتهت الـ25 ثانية!\n\n" +
+
                     $"🚫 اللاعب {userId} خرج من لعبة الجزاء.\n\n" +
+
                     "ℹ️ لم يتم طرده من الروم.";
 
                 if (game.Players.Count < MinPlayers)
@@ -717,7 +835,7 @@ namespace PenaltyBot
                 }
                 else
                 {
-                    // إصلاح ترتيب الدور بعد حذف اللاعب
+                    // تصحيح مؤشر اللاعب بعد الحذف
                     if (removedIndex >= game.Players.Count)
                     {
                         game.CurrentPlayerIndex = -1;
@@ -732,7 +850,9 @@ namespace PenaltyBot
                 }
             }
 
-            await Send(groupId, response);
+            await Send(
+                groupId,
+                response);
 
             if (finish)
             {
@@ -744,7 +864,10 @@ namespace PenaltyBot
             }
 
             if (next)
-                await MoveToNextPlayer(groupId);
+            {
+                await MoveToNextPlayer(
+                    groupId);
+            }
         }
 
         // =========================================================
@@ -777,8 +900,9 @@ namespace PenaltyBot
                 {
                     int checkedPlayers = 0;
 
-                    while (checkedPlayers <
-                           game.Players.Count)
+                    while (
+                        checkedPlayers <
+                        game.Players.Count)
                     {
                         game.CurrentPlayerIndex++;
 
@@ -796,21 +920,30 @@ namespace PenaltyBot
                         if (player == null)
                             continue;
 
+                        // اللاعب الذي لم يكمل 5 تسديدات
                         if (player.Shots <
                             ShotsPerPlayer)
                         {
                             game.WaitingForShot = true;
+
                             game.TurnVersion++;
 
                             response =
                                 "🎯 الدور الآن على:\n\n" +
+
                                 $"👤 {player.UserId}\n" +
+
                                 $"🔢 اللاعب رقم {player.Number}\n" +
+
                                 $"⚽ الأهداف: {player.Goals}\n" +
-                                $"🎯 التسديدات: {player.Shots}/{ShotsPerPlayer}\n\n" +
+
+                                $"🎯 التسديدات: " +
+                                $"{player.Shots}/{ShotsPerPlayer}\n\n" +
+
                                 "1️⃣ يسار\n" +
                                 "2️⃣ وسط\n" +
                                 "3️⃣ يمين\n\n" +
+
                                 "⏱️ لديك 25 ثانية.";
 
                             break;
@@ -824,13 +957,18 @@ namespace PenaltyBot
 
             if (finished)
             {
-                await FinishGame(groupId);
+                await FinishGame(
+                    groupId);
+
                 return;
             }
 
-            await Send(groupId, response!);
+            await Send(
+                groupId,
+                response!);
 
-            StartTimeout(groupId);
+            StartTimeout(
+                groupId);
         }
 
         // =========================================================
@@ -858,7 +996,9 @@ namespace PenaltyBot
                     {
                         response =
                             "⚪ اللعبة غير مبدوءة.\n" +
-                            $"👥 اللاعبين: {game.Players.Count}/{MaxPlayers}";
+
+                            $"👥 اللاعبين: " +
+                            $"{game.Players.Count}/{MaxPlayers}";
                     }
                     else
                     {
@@ -867,20 +1007,31 @@ namespace PenaltyBot
 
                         response =
                             "⚽ حالة لعبة الجزاء\n\n" +
-                            $"👥 اللاعبين: {game.Players.Count}\n" +
-                            $"🎯 الدور: {player?.UserId}\n" +
-                            $"⚽ الأهداف: {player?.Goals}\n" +
-                            $"🎯 التسديدات: {player?.Shots}/{ShotsPerPlayer}\n" +
+
+                            $"👥 اللاعبين: " +
+                            $"{game.Players.Count}\n" +
+
+                            $"🎯 الدور: " +
+                            $"{player?.UserId}\n" +
+
+                            $"⚽ الأهداف: " +
+                            $"{player?.Goals}\n" +
+
+                            $"🎯 التسديدات: " +
+                            $"{player?.Shots}/{ShotsPerPlayer}\n" +
+
                             "⏱️ الوقت: 25 ثانية.";
                     }
                 }
             }
 
-            await Send(groupId, response);
+            await Send(
+                groupId,
+                response);
         }
 
         // =========================================================
-        // نهاية اللعبة وإظهار النتائج
+        // إنهاء اللعبة وعرض النتائج
         // =========================================================
 
         private static async Task FinishGame(
@@ -899,6 +1050,7 @@ namespace PenaltyBot
                 CancelTimeout(game);
 
                 game.Started = false;
+
                 game.WaitingForShot = false;
 
                 if (game.Players.Count == 0)
@@ -952,7 +1104,9 @@ namespace PenaltyBot
                         $"⚽ الأهداف: {winner.Goals}");
 
                     response =
-                        string.Join("\n", lines);
+                        string.Join(
+                            "\n",
+                            lines);
                 }
 
                 game.Players.Clear();
@@ -962,7 +1116,9 @@ namespace PenaltyBot
                 game.TurnVersion++;
             }
 
-            await Send(groupId, response);
+            await Send(
+                groupId,
+                response);
         }
 
         // =========================================================
@@ -988,6 +1144,7 @@ namespace PenaltyBot
                     CancelTimeout(game);
 
                     game.Started = false;
+
                     game.WaitingForShot = false;
 
                     game.Players.Clear();
@@ -999,7 +1156,11 @@ namespace PenaltyBot
             }
 
             if (exists)
-                await Send(groupId, reason);
+            {
+                await Send(
+                    groupId,
+                    reason);
+            }
         }
 
         // =========================================================
@@ -1026,7 +1187,7 @@ namespace PenaltyBot
         }
 
         // =========================================================
-        // إرسال رسالة
+        // إرسال رسالة للروم
         // =========================================================
 
         private static async Task Send(
@@ -1053,7 +1214,7 @@ namespace PenaltyBot
         }
 
         // =========================================================
-        // اتجاه التسديدة
+        // اتجاهات التسديد
         // =========================================================
 
         private static string DirectionName(
@@ -1090,13 +1251,14 @@ namespace PenaltyBot
 
             image.Mutate(ctx =>
             {
-                // =========================
+                // =================================================
                 // الخلفية
-                // =========================
+                // =================================================
 
                 ctx.Fill(
                     Color.ParseHex("#101827"));
 
+                // السماء
                 ctx.Fill(
                     Color.ParseHex("#18253A"),
                     new Rectangle(
@@ -1105,7 +1267,7 @@ namespace PenaltyBot
                         width,
                         360));
 
-                // الملعب
+                // العشب
                 ctx.Fill(
                     Color.ParseHex("#176B3A"),
                     new Rectangle(
@@ -1114,37 +1276,53 @@ namespace PenaltyBot
                         width,
                         440));
 
-                // =========================
+                // =================================================
                 // خطوط الملعب
-                // =========================
+                // =================================================
 
                 ctx.DrawLine(
                     Color.White,
                     5,
-                    new PointF(0, 650),
-                    new PointF(width, 650));
+                    new PointF(
+                        0,
+                        650),
+                    new PointF(
+                        width,
+                        650));
 
                 ctx.DrawLine(
                     Color.White,
                     5,
-                    new PointF(260, 500),
-                    new PointF(940, 500));
+                    new PointF(
+                        260,
+                        500),
+                    new PointF(
+                        940,
+                        500));
 
                 ctx.DrawLine(
                     Color.White,
                     5,
-                    new PointF(260, 500),
-                    new PointF(260, 800));
+                    new PointF(
+                        260,
+                        500),
+                    new PointF(
+                        260,
+                        800));
 
                 ctx.DrawLine(
                     Color.White,
                     5,
-                    new PointF(940, 500),
-                    new PointF(940, 800));
+                    new PointF(
+                        940,
+                        500),
+                    new PointF(
+                        940,
+                        800));
 
-                // =========================
+                // =================================================
                 // المرمى
-                // =========================
+                // =================================================
 
                 float goalLeft = 300;
                 float goalRight = 900;
@@ -1181,13 +1359,14 @@ namespace PenaltyBot
                         goalRight,
                         goalBottom));
 
-                // =========================
+                // =================================================
                 // شبكة المرمى
-                // =========================
+                // =================================================
 
-                for (int x = 330;
-                     x < goalRight;
-                     x += 40)
+                for (
+                    int x = 330;
+                    x < goalRight;
+                    x += 40)
                 {
                     ctx.DrawLine(
                         Color.ParseHex("#DDE5E8"),
@@ -1200,9 +1379,10 @@ namespace PenaltyBot
                             goalBottom));
                 }
 
-                for (int y = 200;
-                     y < goalBottom;
-                     y += 40)
+                for (
+                    int y = 200;
+                    y < goalBottom;
+                    y += 40)
                 {
                     ctx.DrawLine(
                         Color.ParseHex("#DDE5E8"),
@@ -1215,9 +1395,9 @@ namespace PenaltyBot
                             y));
                 }
 
-                // =========================
-                // مكان الحارس
-                // =========================
+                // =================================================
+                // الحارس
+                // =================================================
 
                 float keeperX =
                     goalkeeper switch
@@ -1237,7 +1417,9 @@ namespace PenaltyBot
                         new PointF(
                             keeperX,
                             keeperY - 90),
-                        new SizeF(76, 76)));
+                        new SizeF(
+                            76,
+                            76)));
 
                 // جسم الحارس
                 ctx.Fill(
@@ -1292,9 +1474,9 @@ namespace PenaltyBot
                         keeperX + 100,
                         keeperY - 70));
 
-                // =========================
-                // مكان الكرة
-                // =========================
+                // =================================================
+                // الكرة
+                // =================================================
 
                 float ballX;
 
@@ -1330,7 +1512,9 @@ namespace PenaltyBot
                         new PointF(
                             ballX + 5,
                             ballY + 7),
-                        new SizeF(50, 50)));
+                        new SizeF(
+                            50,
+                            50)));
 
                 // الكرة
                 ctx.Fill(
@@ -1339,7 +1523,9 @@ namespace PenaltyBot
                         new PointF(
                             ballX,
                             ballY),
-                        new SizeF(48, 48)));
+                        new SizeF(
+                            48,
+                            48)));
 
                 // تفاصيل الكرة
                 ctx.Fill(
@@ -1348,7 +1534,9 @@ namespace PenaltyBot
                         new PointF(
                             ballX - 7,
                             ballY - 5),
-                        new SizeF(10, 10)));
+                        new SizeF(
+                            10,
+                            10)));
 
                 ctx.Fill(
                     Color.ParseHex("#111111"),
@@ -1356,11 +1544,13 @@ namespace PenaltyBot
                         new PointF(
                             ballX + 8,
                             ballY + 4),
-                        new SizeF(8, 8)));
+                        new SizeF(
+                            8,
+                            8)));
 
-                // =========================
-                // الكتابة
-                // =========================
+                // =================================================
+                // النص
+                // =================================================
 
                 Font fontBig =
                     SystemFonts.CreateFont(
@@ -1401,7 +1591,8 @@ namespace PenaltyBot
                         700));
 
                 ctx.DrawText(
-                    $"Goals: {goals}   Shots: {shots}/{ShotsPerPlayer}",
+                    $"Goals: {goals}   " +
+                    $"Shots: {shots}/{ShotsPerPlayer}",
                     fontSmall,
                     Color.White,
                     new PointF(
@@ -1409,28 +1600,38 @@ namespace PenaltyBot
                         700));
             });
 
-            // =========================
+            // =====================================================
             // تحويل الصورة إلى JPEG
-            // =========================
+            // =====================================================
 
             using var stream =
                 new MemoryStream();
 
-            image.SaveAsJpeg(stream);
+            image.SaveAsJpeg(
+                stream);
 
-            return stream.ToArray();
+            byte[] result =
+                stream.ToArray();
+
+            Console.WriteLine(
+                $"[IMAGE CREATE] JPEG = {result.Length} bytes");
+
+            return result;
         }
 
         // =========================================================
-        // هل كل اللاعبين خلصوا 5 تسديدات؟
+        // التأكد من انتهاء جميع اللاعبين
         // =========================================================
 
         private static bool AllPlayersFinished(
             PenaltyGame game)
         {
-            return game.Players.Count > 0 &&
-                   game.Players.All(
-                       p => p.Shots >= ShotsPerPlayer);
+            return
+                game.Players.Count > 0 &&
+                game.Players.All(
+                    p =>
+                        p.Shots >=
+                        ShotsPerPlayer);
         }
     }
 }
