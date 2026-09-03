@@ -5,17 +5,13 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>
 
-    <!-- WolfLive.Api -->
-    <ProjectReference Include="..\WolfLive.Api\WolfLive.Api.csproj" />
-
-    <!-- مكتبة إنشاء صورة ركلة الجزاء -->
+    <!-- ImageSharp -->
     <PackageReference Include="SixLabors.ImageSharp"
                       Version="3.1.11" />
 
