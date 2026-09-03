@@ -1773,6 +1773,79 @@ namespace PenaltyBot
         // ============================================================
         // GOAL EFFECT
         // ============================================================
+        private static void DrawGoalEffect(
+    Image<Rgba32> image)
+{
+    DrawCircle(
+        image,
+        450,
+        190,
+        100,
+        7,
+        new Rgba32(
+            255,
+            220,
+            40,
+            255));
+
+    DrawCircle(
+        image,
+        450,
+        190,
+        70,
+        5,
+        new Rgba32(
+            255,
+            255,
+            255,
+            255));
+
+    for (int i = 0; i < 16; i++)
+    {
+        double angle =
+            i * Math.PI * 2 / 16;
+
+        int x1 =
+            450 +
+            (int)(105 * Math.Cos(angle));
+
+        int y1 =
+            190 +
+            (int)(105 * Math.Sin(angle));
+
+        int x2 =
+            450 +
+            (int)(145 * Math.Cos(angle));
+
+        int y2 =
+            190 +
+            (int)(145 * Math.Sin(angle));
+
+        DrawLine(
+            image,
+            x1,
+            y1,
+            x2,
+            y2,
+            5,
+            new Rgba32(
+                255,
+                220,
+                40,
+                255));
+    }
+
+    FillCircle(
+        image,
+        450,
+        190,
+        25,
+        new Rgba32(
+            255,
+            80,
+            80,
+            255));
+        }
         private static void DrawSaveEffect(
             Image<Rgba32> image)
         {
