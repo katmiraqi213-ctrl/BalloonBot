@@ -6,35 +6,33 @@ using System.Threading.Tasks;
 using WolfLive.Api;
 using WolfLive.Api.Models;
 
-namespace BalloonBot
+namespace PenaltyBot
 {
-    public class Player
+    public class PenaltyPlayer
     {
         public string UserId { get; set; } = "";
         public int Number { get; set; }
-        public int Balloons { get; set; } = 7;
-        public bool Eliminated { get; set; } = false;
+        public int Goals { get; set; } = 0;
+        public int Shots { get; set; } = 0;
     }
 
-    public class BalloonGame
+    public class PenaltyGame
     {
         public string GroupId { get; set; } = "";
-
-        public List<Player> Players { get; set; } = new List<Player>();
+        public List<PenaltyPlayer> Players { get; set; } =
+            new List<PenaltyPlayer>();
 
         public bool Started { get; set; } = false;
 
         public int CurrentPlayerIndex { get; set; } = 0;
 
-        public bool WaitingForOpponent { get; set; } = false;
-
-        public bool WaitingForBalloon { get; set; } = false;
-
-        public Player? SelectedOpponent { get; set; }
+        public bool WaitingForShot { get; set; } = false;
 
         public CancellationTokenSource? TurnTimeout { get; set; }
 
-        public Player? CurrentPlayer
+        public int TurnVersion { get; set; } = 0;
+
+        public PenaltyPlayer? CurrentPlayer
         {
             get
             {
@@ -56,10 +54,17 @@ namespace BalloonBot
 
         private static readonly string TargetGroupId = "82041031";
 
-        private static BalloonGame? Game;
+        private static PenaltyGame? Game;
 
         private static readonly SemaphoreSlim GameLock =
             new SemaphoreSlim(1, 1);
+
+        private static readonly Random Random =
+            new Random();
+
+        private const int MaxPlayers = 10;
+        private const int ShotsPerPlayer = 5;
+        private const int TurnSeconds = 10;
 
         public static async Task Main(string[] args)
         {
@@ -70,26 +75,28 @@ namespace BalloonBot
                 Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
             Console.WriteLine("=================================");
-            Console.WriteLine("       BALLOON BOT STARTING");
+            Console.WriteLine("       PENALTY BOT STARTING");
             Console.WriteLine("=================================");
 
             if (string.IsNullOrWhiteSpace(email) ||
                 string.IsNullOrWhiteSpace(password))
             {
-                Console.WriteLine("ERROR: WOLF_EMAIL or WOLF_PASSWORD missing.");
+                Console.WriteLine(
+                    "ERROR: WOLF_EMAIL or WOLF_PASSWORD missing."
+                );
+
                 return;
             }
 
             Client = new WolfClient();
 
-            // نستقبل الرسائل مباشرة من socket
-            // بدون Messaging.Initialize()
             Client.On<WolfMessage>(
                 "message send",
                 OnWolfMessage
             );
 
-            bool loggedIn = await LoginManually(email, password);
+            bool loggedIn =
+                await LoginManually(email, password);
 
             if (!loggedIn)
             {
@@ -102,7 +109,9 @@ namespace BalloonBot
             try
             {
                 bool subscribed =
-                    await Client.Messaging.GroupMessageSubscribe(TargetGroupId);
+                    await Client.Messaging.GroupMessageSubscribe(
+                        TargetGroupId
+                    );
 
                 Console.WriteLine(
                     subscribed
@@ -114,6 +123,7 @@ namespace BalloonBot
             {
                 Console.WriteLine("SUBSCRIBE ERROR:");
                 Console.WriteLine(ex);
+
                 return;
             }
 
@@ -134,7 +144,6 @@ namespace BalloonBot
             {
                 Console.WriteLine("Connecting to WOLF...");
 
-                // ننتظر welcome قبل تسجيل الدخول
                 var welcomeSource =
                     new TaskCompletionSource<bool>(
                         TaskCreationOptions.RunContinuationsAsynchronously
@@ -145,14 +154,20 @@ namespace BalloonBot
                     _ =>
                     {
                         Console.WriteLine("WELCOME RECEIVED");
+
                         welcomeSource.TrySetResult(true);
                     }
                 );
 
                 await Client.Connect();
 
-                Console.WriteLine("Connected to WOLF server.");
-                Console.WriteLine("Waiting for WOLF welcome...");
+                Console.WriteLine(
+                    "Connected to WOLF server."
+                );
+
+                Console.WriteLine(
+                    "Waiting for WOLF welcome..."
+                );
 
                 var completed =
                     await Task.WhenAny(
@@ -171,20 +186,24 @@ namespace BalloonBot
 
                 Console.WriteLine("Sending login...");
 
-                var user = await Client.Emit<User>(
-                    new Packet(
-                        "security login",
-                        new
-                        {
-                            username = email,
-                            password = password
-                        }
-                    )
-                );
+                var user =
+                    await Client.Emit<User>(
+                        new Packet(
+                            "security login",
+                            new
+                            {
+                                username = email,
+                                password = password
+                            }
+                        )
+                    );
 
                 if (user == null)
                 {
-                    Console.WriteLine("LOGIN RESPONSE IS NULL.");
+                    Console.WriteLine(
+                        "LOGIN RESPONSE IS NULL."
+                    );
+
                     return false;
                 }
 
@@ -209,15 +228,13 @@ namespace BalloonBot
                 if (wolfMessage == null)
                     return;
 
-                // نحول الرسالة إلى Message
-                var message = new Message(wolfMessage);
+                var message =
+                    new Message(wolfMessage);
 
-                // نطبع كل رسالة تصل للـ Log للتشخيص
                 Console.WriteLine(
                     $"MESSAGE RECEIVED | Group={message.GroupId} | Content={message.Content}"
                 );
 
-                // فقط الكروب المطلوب
                 if (!message.IsGroup)
                     return;
 
@@ -230,12 +247,17 @@ namespace BalloonBot
                 if (string.IsNullOrWhiteSpace(content))
                     return;
 
-                await HandleMessage(message, content);
+                await HandleMessage(
+                    message,
+                    content
+                );
             }
             catch (Exception ex)
             {
-                // مهم جداً حتى لا ينهار البوت
-                Console.WriteLine("MESSAGE ERROR:");
+                Console.WriteLine(
+                    "MESSAGE ERROR:"
+                );
+
                 Console.WriteLine(ex);
             }
         }
@@ -248,130 +270,146 @@ namespace BalloonBot
 
             try
             {
+                string lower =
+                    content.ToLowerInvariant();
+
                 // =========================
-                // أوامر البوت
+                // HELP
                 // =========================
 
-                if (content.Equals(
-                        "!بالونات",
-                        StringComparison.OrdinalIgnoreCase)
-                    ||
-                    content.Equals(
-                        "!بالونات مساعدة",
-                        StringComparison.OrdinalIgnoreCase))
+                if (lower == "!جزاء مساعدة" ||
+                    lower == "!جزاء help")
                 {
                     await Send(
                         message,
-                        "🎈 أوامر لعبة البالونات 🎈\n\n" +
-                        "!بالونات جديد — إنشاء لعبة\n" +
-                        "!بالونات انضم — الانضمام\n" +
-                        "!بالونات لاعبين — عرض اللاعبين\n" +
-                        "!بالونات بدء — بدء اللعبة\n" +
-                        "!بالونات انهاء — إنهاء اللعبة\n\n" +
-                        "🎈 كل لاعب يبدأ بـ 7 بالونات."
+                        "⚽ لعبة ضربة الجزاء ⚽\n\n" +
+                        "🎮 الأوامر:\n" +
+                        "!جزاء — إنشاء لعبة\n" +
+                        "!جزاء انضم — الانضمام\n" +
+                        "!جزاء لاعبين — عرض اللاعبين\n" +
+                        "!جزاء بدء — بدء اللعبة\n" +
+                        "!جزاء حالة — حالة اللعبة\n" +
+                        "!جزاء انهاء — إنهاء اللعبة\n\n" +
+                        "🎯 أثناء دورك:\n" +
+                        "1️⃣ يمين\n" +
+                        "2️⃣ وسط\n" +
+                        "3️⃣ يسار\n\n" +
+                        "🥅 الحارس يختار مكاناً عشوائياً.\n" +
+                        "إذا اختار نفس المكان تُصد التسديدة.\n" +
+                        "إذا اختار مكاناً مختلفاً = هدف! ⚽\n\n" +
+                        "⏱️ لديك 10 ثواني لكل تسديدة.\n" +
+                        "🎯 لكل لاعب 5 تسديدات."
                     );
 
                     return;
                 }
 
-                if (content.Equals(
-                        "!بالونات جديد",
-                        StringComparison.OrdinalIgnoreCase))
+                // =========================
+                // CREATE GAME
+                // =========================
+
+                if (lower == "!جزاء")
                 {
                     await NewGame(message);
                     return;
                 }
 
-                if (content.Equals(
-                        "!بالونات انضم",
-                        StringComparison.OrdinalIgnoreCase)
-                    ||
-                    content.Equals(
-                        "!بالونات انضمام",
-                        StringComparison.OrdinalIgnoreCase))
+                // =========================
+                // NO GAME
+                // =========================
+
+                if (Game == null)
+                {
+                    if (lower.StartsWith("!جزاء"))
+                    {
+                        await Send(
+                            message,
+                            "❌ لا توجد لعبة حالياً.\n" +
+                            "اكتب !جزاء لإنشاء لعبة جديدة."
+                        );
+                    }
+
+                    return;
+                }
+
+                // =========================
+                // JOIN
+                // =========================
+
+                if (lower == "!جزاء انضم" ||
+                    lower == "!جزاء انضمام")
                 {
                     await JoinGame(message);
                     return;
                 }
 
-                if (content.Equals(
-                        "!بالونات لاعبين",
-                        StringComparison.OrdinalIgnoreCase))
+                // =========================
+                // PLAYERS
+                // =========================
+
+                if (lower == "!جزاء لاعبين")
                 {
                     await ShowPlayers(message);
                     return;
                 }
 
-                if (content.Equals(
-                        "!بالونات بدء",
-                        StringComparison.OrdinalIgnoreCase))
+                // =========================
+                // START
+                // =========================
+
+                if (lower == "!جزاء بدء")
                 {
                     await StartGame(message);
                     return;
                 }
 
-                if (content.Equals(
-                        "!بالونات انهاء",
-                        StringComparison.OrdinalIgnoreCase)
-                    ||
-                    content.Equals(
-                        "!بالونات إنهاء",
-                        StringComparison.OrdinalIgnoreCase))
+                // =========================
+                // STATUS
+                // =========================
+
+                if (lower == "!جزاء حالة")
+                {
+                    await ShowStatus(message);
+                    return;
+                }
+
+                // =========================
+                // END
+                // =========================
+
+                if (lower == "!جزاء انهاء" ||
+                    lower == "!جزاء إنهاء")
                 {
                     await EndGame(message);
                     return;
                 }
 
                 // =========================
-                // أرقام اللعبة
+                // GAMEPLAY
                 // =========================
 
-                if (Game == null)
-                    return;
-
-                if (!Game.Started)
-                    return;
-
-                // نتأكد أن الرسالة من اللاعب الحالي
-                Player? current = Game.CurrentPlayer;
-
-                if (current == null)
-                    return;
-
-                if (message.UserId != current.UserId)
-                    return;
-
-                // إذا ننتظر اختيار الخصم
-                if (Game.WaitingForOpponent)
+                if (Game.Started &&
+                    Game.WaitingForShot)
                 {
-                    if (int.TryParse(content, out int opponentNumber))
+                    if (TryParseChoice(
+                        content,
+                        out int choice))
                     {
-                        await ChooseOpponent(
+                        await ProcessShot(
                             message,
-                            opponentNumber
+                            choice
                         );
+
+                        return;
                     }
-
-                    return;
-                }
-
-                // إذا ننتظر اختيار البالونة
-                if (Game.WaitingForBalloon)
-                {
-                    if (int.TryParse(content, out int balloonNumber))
-                    {
-                        await ChooseBalloon(
-                            message,
-                            balloonNumber
-                        );
-                    }
-
-                    return;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("HANDLE ERROR:");
+                Console.WriteLine(
+                    "HANDLE ERROR:"
+                );
+
                 Console.WriteLine(ex);
             }
             finally
@@ -380,166 +418,172 @@ namespace BalloonBot
             }
         }
 
-        // =====================================================
-        // إنشاء اللعبة
-        // =====================================================
+        // =========================================================
+        // NEW GAME
+        // =========================================================
 
-        private static async Task NewGame(Message message)
+        private static async Task NewGame(
+            Message message)
         {
             if (Game != null)
             {
                 await Send(
                     message,
-                    "⚠️ توجد لعبة بالونات حالياً.\n" +
-                    "استخدم !بالونات انهاء أولاً."
+                    "⚠️ توجد لعبة بالفعل.\n" +
+                    "اكتب !جزاء لاعبين لمعرفة اللاعبين."
                 );
 
                 return;
             }
 
-            Game = new BalloonGame
+            Game = new PenaltyGame
             {
-                GroupId = TargetGroupId
+                GroupId = TargetGroupId,
+                Started = false,
+                CurrentPlayerIndex = 0,
+                WaitingForShot = false
             };
 
             await Send(
                 message,
-                "🎈🔥 تم إنشاء لعبة البالونات 🔥🎈\n\n" +
-                "كل لاعب يبدأ بـ 7 🎈\n\n" +
-                "للانضمام أرسل:\n" +
-                "!بالونات انضم\n\n" +
-                "بعد اكتمال اللاعبين:\n" +
-                "!بالونات بدء"
+                "⚽🔥 تم إنشاء لعبة ضربة الجزاء!\n\n" +
+                "للانضمام اكتب:\n" +
+                "!جزاء انضم\n\n" +
+                "👥 الحد الأقصى: 10 لاعبين\n" +
+                "🎯 كل لاعب لديه 5 تسديدات\n" +
+                "⏱️ 10 ثواني لكل تسديدة\n\n" +
+                "عند اكتمال اللاعبين اكتب:\n" +
+                "!جزاء بدء"
             );
         }
 
-        // =====================================================
-        // الانضمام
-        // =====================================================
+        // =========================================================
+        // JOIN
+        // =========================================================
 
-        private static async Task JoinGame(Message message)
+        private static async Task JoinGame(
+            Message message)
         {
             if (Game == null)
-            {
-                await Send(
-                    message,
-                    "❌ لا توجد لعبة حالياً.\n" +
-                    "اكتب !بالونات جديد"
-                );
-
                 return;
-            }
 
             if (Game.Started)
             {
                 await Send(
                     message,
-                    "❌ اللعبة بدأت بالفعل."
+                    "❌ اللعبة بدأت بالفعل، لا يمكن الانضمام."
+                );
+
+                return;
+            }
+
+            string userId =
+                message.UserId ?? "";
+
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                await Send(
+                    message,
+                    "❌ تعذر معرفة حساب اللاعب."
                 );
 
                 return;
             }
 
             if (Game.Players.Any(
-                p => p.UserId == message.UserId))
+                p => p.UserId == userId))
             {
+                var existing =
+                    Game.Players.First(
+                        p => p.UserId == userId
+                    );
+
                 await Send(
                     message,
-                    "⚠️ أنت منضم للعبة بالفعل."
+                    $"⚠️ أنت مسجل بالفعل كـ اللاعب {existing.Number}️⃣."
                 );
 
                 return;
             }
 
-            int number = Game.Players.Count + 1;
-
-            Game.Players.Add(
-                new Player
-                {
-                    UserId = message.UserId,
-                    Number = number,
-                    Balloons = 7
-                }
-            );
-
-            await Send(
-                message,
-                $"🎈 تم انضمام اللاعب رقم {number}\n" +
-                $"رصيده: 7 🎈\n\n" +
-                $"عدد اللاعبين: {Game.Players.Count}"
-            );
-        }
-
-        // =====================================================
-        // عرض اللاعبين
-        // =====================================================
-
-        private static async Task ShowPlayers(Message message)
-        {
-            if (Game == null ||
-                Game.Players.Count == 0)
+            if (Game.Players.Count >= MaxPlayers)
             {
                 await Send(
                     message,
-                    "❌ لا يوجد لاعبين حالياً."
+                    "❌ اللعبة مكتملة، الحد الأقصى 10 لاعبين."
+                );
+
+                return;
+            }
+
+            int number =
+                Game.Players.Count + 1;
+
+            var player =
+                new PenaltyPlayer
+                {
+                    UserId = userId,
+                    Number = number
+                };
+
+            Game.Players.Add(player);
+
+            await Send(
+                message,
+                $"✅ تم انضمامك إلى اللعبة!\n\n" +
+                $"👤 رقمك: اللاعب {number}️⃣\n" +
+                $"👥 عدد اللاعبين: {Game.Players.Count}/{MaxPlayers}\n\n" +
+                "عند جاهزية اللاعبين اكتب:\n" +
+                "!جزاء بدء"
+            );
+        }
+
+        // =========================================================
+        // SHOW PLAYERS
+        // =========================================================
+
+        private static async Task ShowPlayers(
+            Message message)
+        {
+            if (Game == null)
+                return;
+
+            if (Game.Players.Count == 0)
+            {
+                await Send(
+                    message,
+                    "👥 لا يوجد لاعبون حالياً."
                 );
 
                 return;
             }
 
             string text =
-                "🎈 قائمة اللاعبين 🎈\n\n";
+                "⚽ لاعبو لعبة ضربة الجزاء ⚽\n\n";
 
             foreach (var player in Game.Players)
             {
-                string balloons =
-                    string.Concat(
-                        Enumerable.Repeat(
-                            "🎈",
-                            Math.Min(
-                                player.Balloons,
-                                7
-                            )
-                        )
-                    );
-
-                string status =
-                    player.Eliminated
-                        ? " ❌ خارج اللعبة"
-                        : "";
-
                 text +=
-                    $"{player.Number}️⃣ لاعب {player.Number} — " +
-                    $"{player.Balloons} {balloons}" +
-                    $"{status}\n";
+                    $"👤 اللاعب {player.Number}️⃣\n" +
+                    $"🎯 الأهداف: {player.Goals}\n" +
+                    $"🥅 التسديدات: {player.Shots}/{ShotsPerPlayer}\n\n";
             }
 
-            if (Game.Started &&
-                Game.CurrentPlayer != null)
-            {
-                text +=
-                    $"\n🎯 الدور على اللاعب " +
-                    $"{Game.CurrentPlayer.Number}️⃣";
-            }
-
-            await Send(message, text);
+            await Send(
+                message,
+                text
+            );
         }
 
-        // =====================================================
-        // بدء اللعبة
-        // =====================================================
+        // =========================================================
+        // START GAME
+        // =========================================================
 
-        private static async Task StartGame(Message message)
+        private static async Task StartGame(
+            Message message)
         {
             if (Game == null)
-            {
-                await Send(
-                    message,
-                    "❌ لا توجد لعبة."
-                );
-
                 return;
-            }
 
             if (Game.Started)
             {
@@ -555,354 +599,234 @@ namespace BalloonBot
             {
                 await Send(
                     message,
-                    "❌ تحتاج اللعبة إلى لاعبين اثنين على الأقل."
+                    "❌ يجب أن يكون هناك لاعبان على الأقل لبدء اللعبة."
                 );
 
                 return;
             }
 
             Game.Started = true;
+
             Game.CurrentPlayerIndex = 0;
-            Game.WaitingForOpponent = true;
-            Game.WaitingForBalloon = false;
 
-            Player? current = Game.CurrentPlayer;
+            Game.WaitingForShot = true;
+
+            Game.TurnVersion++;
 
             await Send(
                 message,
-                "🎈🔥 بدأت لعبة البالونات 🔥🎈\n\n" +
-                $"🎯 الدور على اللاعب {current?.Number}️⃣\n\n" +
-                "أرسل رقم اللاعب الذي تريد مهاجمته.\n" +
-                "⏱️ لديك 15 ثانية."
+                "⚽🔥 بدأت لعبة ضربة الجزاء!\n\n" +
+                $"👥 عدد اللاعبين: {Game.Players.Count}\n" +
+                $"🎯 كل لاعب لديه {ShotsPerPlayer} تسديدات\n" +
+                $"⏱️ الوقت: {TurnSeconds} ثواني\n\n" +
+                "🏆 اللاعب صاحب أكبر عدد من الأهداف يفوز!"
             );
 
-            StartOpponentTimeout();
+            await Task.Delay(500);
+
+            await SendCurrentTurn();
+
+            StartShotTimeout();
         }
 
-        // =====================================================
-        // اختيار الخصم
-        // =====================================================
+        // =========================================================
+        // SEND CURRENT TURN
+        // =========================================================
 
-        private static async Task ChooseOpponent(
-            Message message,
-            int opponentNumber)
+        private static async Task SendCurrentTurn()
         {
-            if (Game == null)
+            if (Game == null ||
+                !Game.Started ||
+                !Game.WaitingForShot)
                 return;
 
-            Player? current =
+            var player =
                 Game.CurrentPlayer;
 
-            if (current == null)
+            if (player == null)
                 return;
 
-            Player? opponent =
-                Game.Players.FirstOrDefault(
-                    p => p.Number == opponentNumber
-                );
+            int shotNumber =
+                player.Shots + 1;
 
-            if (opponent == null)
-            {
-                await Send(
-                    message,
-                    "❌ رقم اللاعب غير صحيح."
-                );
+            await SendToGroup(
+                "⚽ دور اللاعب " +
+                $"{player.Number}️⃣!\n\n" +
 
-                return;
-            }
+                $"🎯 التسديدة رقم {shotNumber}/{ShotsPerPlayer}\n\n" +
 
-            if (opponent.UserId == current.UserId)
-            {
-                await Send(
-                    message,
-                    "❌ لا يمكنك اختيار نفسك."
-                );
+                "اختار مكان التسديدة:\n" +
+                "1️⃣ يمين\n" +
+                "2️⃣ وسط\n" +
+                "3️⃣ يسار\n\n" +
 
-                return;
-            }
-
-            if (opponent.Eliminated ||
-                opponent.Balloons <= 0)
-            {
-                await Send(
-                    message,
-                    "❌ هذا اللاعب خرج من اللعبة."
-                );
-
-                return;
-            }
-
-            Game.TurnTimeout?.Cancel();
-
-            Game.SelectedOpponent = opponent;
-
-            Game.WaitingForOpponent = false;
-            Game.WaitingForBalloon = true;
-
-            await Send(
-                message,
-                $"🎯 اخترت اللاعب {opponent.Number}️⃣\n\n" +
-                $"عنده حالياً {opponent.Balloons} 🎈\n\n" +
-                $"أرسل رقم البالونة من 1 إلى {opponent.Balloons}\n" +
-                "⏱️ لديك 15 ثانية."
+                $"⏱️ عندك {TurnSeconds} ثواني!"
             );
-
-            StartBalloonTimeout();
         }
 
-        // =====================================================
-        // اختيار البالونة
-        // =====================================================
+        // =========================================================
+        // PROCESS SHOT
+        // =========================================================
 
-        private static async Task ChooseBalloon(
+        private static async Task ProcessShot(
             Message message,
-            int balloonNumber)
+            int choice)
         {
-            if (Game == null)
+            if (Game == null ||
+                !Game.Started ||
+                !Game.WaitingForShot)
                 return;
 
-            Player? current =
+            var player =
                 Game.CurrentPlayer;
 
-            Player? opponent =
-                Game.SelectedOpponent;
-
-            if (current == null ||
-                opponent == null)
+            if (player == null)
                 return;
 
-            if (balloonNumber < 1 ||
-                balloonNumber > opponent.Balloons)
+            if (player.UserId != message.UserId)
             {
                 await Send(
                     message,
-                    $"❌ رقم البالونة غير صحيح.\n" +
-                    $"اختر من 1 إلى {opponent.Balloons}"
+                    $"⛔ مو دورك!\n" +
+                    $"الآن دور اللاعب {player.Number}️⃣."
                 );
 
                 return;
             }
 
-            Game.TurnTimeout?.Cancel();
-
-            Game.WaitingForBalloon = false;
-
-            Random random = new Random();
-
-            int chance = random.Next(1, 101);
-
-            // 15% حظ
-            if (chance <= 15)
+            if (choice < 1 ||
+                choice > 3)
             {
                 await Send(
                     message,
-                    $"🍀 حظ!\n\n" +
-                    $"البالونة رقم {balloonNumber}️⃣ " +
-                    "لم تنفجر!\n\n" +
-                    $"اللاعب {opponent.Number}️⃣ ما زال عنده " +
-                    $"{opponent.Balloons} 🎈"
+                    "❌ اختيار غير صحيح.\n" +
+                    "اكتب 1 أو 2 أو 3."
                 );
-
-                Game.SelectedOpponent = null;
-
-                MoveToNextPlayer();
 
                 return;
             }
 
-            // 15% نجاة
-            if (chance <= 30)
+            CancelTurnTimeout();
+
+            Game.WaitingForShot = false;
+
+            Game.TurnVersion++;
+
+            player.Shots++;
+
+            int goalkeeper =
+                Random.Next(1, 4);
+
+            string shotName =
+                GetDirectionName(choice);
+
+            string goalkeeperName =
+                GetDirectionName(goalkeeper);
+
+            bool goal =
+                choice != goalkeeper;
+
+            if (goal)
             {
-                await Send(
-                    message,
-                    $"🛡️ نجاة!\n\n" +
-                    $"البالونة رقم {balloonNumber}️⃣ " +
-                    "بقيت بدون انفجار!\n\n" +
-                    $"اللاعب {opponent.Number}️⃣ عنده " +
-                    $"{opponent.Balloons} 🎈"
+                player.Goals++;
+
+                await SendToGroup(
+                    $"⚽🔥 هــــــــدف!\n\n" +
+                    $"👤 اللاعب {player.Number}️⃣\n" +
+                    $"🎯 التسديدة: {shotName}\n" +
+                    $"🧤 الحارس: {goalkeeperName}\n\n" +
+                    $"🥅 هدف رقم {player.Goals}!"
                 );
+            }
+            else
+            {
+                await SendToGroup(
+                    $"🧤❌ تــــــم التصدي!\n\n" +
+                    $"👤 اللاعب {player.Number}️⃣\n" +
+                    $"🎯 التسديدة: {shotName}\n" +
+                    $"🧤 الحارس اختار: {goalkeeperName}\n\n" +
+                    "الحارس قرأ التسديدة! 🔥"
+                );
+            }
 
-                Game.SelectedOpponent = null;
+            if (AllShotsFinished())
+            {
+                await Task.Delay(700);
 
-                MoveToNextPlayer();
+                await FinishGame();
 
                 return;
             }
-
-            // 10% دور إضافي
-            if (chance <= 40)
-            {
-                opponent.Balloons--;
-
-                string result =
-                    $"🔄 دور إضافي!\n\n" +
-                    $"💥 انفجرت البالونة رقم {balloonNumber}️⃣\n" +
-                    $"اللاعب {opponent.Number}️⃣ أصبح عنده " +
-                    $"{opponent.Balloons} 🎈";
-
-                if (opponent.Balloons <= 0)
-                {
-                    opponent.Balloons = 0;
-                    opponent.Eliminated = true;
-
-                    result +=
-                        $"\n\n❌ اللاعب {opponent.Number}️⃣ خرج من اللعبة!";
-
-                    if (CheckWinner(out Player? winner))
-                    {
-                        await Send(
-                            message,
-                            result +
-                            $"\n\n🏆 الفائز هو اللاعب " +
-                            $"{winner!.Number}️⃣ 🎉"
-                        );
-
-                        FinishGame();
-
-                        return;
-                    }
-                }
-
-                Game.SelectedOpponent = null;
-                Game.WaitingForOpponent = true;
-
-                await Send(
-                    message,
-                    result +
-                    "\n\n🔥 لديك دور إضافي!\n" +
-                    $"🎯 اللاعب {current.Number}️⃣ اختر خصماً جديداً.\n" +
-                    "⏱️ لديك 15 ثانية."
-                );
-
-                StartOpponentTimeout();
-
-                return;
-            }
-
-            // 60% انفجار طبيعي
-            opponent.Balloons--;
-
-            if (opponent.Balloons < 0)
-                opponent.Balloons = 0;
-
-            string normalResult =
-                $"💥 انفجرت البالونة رقم {balloonNumber}️⃣!\n\n" +
-                $"اللاعب {opponent.Number}️⃣ بقي عنده " +
-                $"{opponent.Balloons} 🎈";
-
-            if (opponent.Balloons == 0)
-            {
-                opponent.Eliminated = true;
-
-                normalResult +=
-                    $"\n\n❌ اللاعب {opponent.Number}️⃣ خرج من اللعبة!";
-
-                if (CheckWinner(out Player? winner))
-                {
-                    await Send(
-                        message,
-                        normalResult +
-                        $"\n\n🏆🎉 الفائز هو اللاعب " +
-                        $"{winner!.Number}️⃣ 🎉🏆"
-                    );
-
-                    FinishGame();
-
-                    return;
-                }
-            }
-
-            Game.SelectedOpponent = null;
-
-            await Send(
-                message,
-                normalResult
-            );
 
             MoveToNextPlayer();
+
+            await Task.Delay(500);
+
+            await SendCurrentTurn();
+
+            StartShotTimeout();
         }
 
-        // =====================================================
-        // الانتقال للاعب التالي
-        // =====================================================
+        // =========================================================
+        // MOVE NEXT PLAYER
+        // =========================================================
 
         private static void MoveToNextPlayer()
         {
-            if (Game == null)
+            if (Game == null ||
+                Game.Players.Count == 0)
                 return;
 
-            int count = Game.Players.Count;
+            int count =
+                Game.Players.Count;
 
             for (int i = 1; i <= count; i++)
             {
-                int nextIndex =
-                    (Game.CurrentPlayerIndex + i) % count;
+                int index =
+                    (Game.CurrentPlayerIndex + i)
+                    % count;
 
-                Player next =
-                    Game.Players[nextIndex];
+                var player =
+                    Game.Players[index];
 
-                if (!next.Eliminated &&
-                    next.Balloons > 0)
+                if (player.Shots < ShotsPerPlayer)
                 {
                     Game.CurrentPlayerIndex =
-                        nextIndex;
+                        index;
 
-                    Game.WaitingForOpponent = true;
-                    Game.WaitingForBalloon = false;
+                    Game.WaitingForShot = true;
 
-                    SendCurrentTurn();
-
-                    StartOpponentTimeout();
+                    Game.TurnVersion++;
 
                     return;
                 }
             }
         }
 
-        // =====================================================
-        // إرسال الدور الحالي
-        // =====================================================
+        // =========================================================
+        // ALL SHOTS FINISHED
+        // =========================================================
 
-        private static async void SendCurrentTurn()
+        private static bool AllShotsFinished()
         {
-            try
-            {
-                if (Game == null)
-                    return;
+            if (Game == null)
+                return true;
 
-                Player? current =
-                    Game.CurrentPlayer;
-
-                if (current == null)
-                    return;
-
-                await SendToGroup(
-                    $"🎯 الدور الآن على اللاعب " +
-                    $"{current.Number}️⃣\n\n" +
-                    "اختر رقم اللاعب الذي تريد مهاجمته.\n" +
-                    "⏱️ لديك 15 ثانية."
-                );
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(
-                    "TURN MESSAGE ERROR:"
-                );
-
-                Console.WriteLine(ex);
-            }
+            return Game.Players.All(
+                p => p.Shots >= ShotsPerPlayer
+            );
         }
 
-        // =====================================================
-        // مؤقت اختيار الخصم
-        // =====================================================
+        // =========================================================
+        // TIMEOUT
+        // =========================================================
 
-        private static void StartOpponentTimeout()
+        private static void StartShotTimeout()
         {
             if (Game == null)
                 return;
 
-            Game.TurnTimeout?.Cancel();
+            CancelTurnTimeout();
 
             Game.TurnTimeout =
                 new CancellationTokenSource();
@@ -910,119 +834,76 @@ namespace BalloonBot
             CancellationToken token =
                 Game.TurnTimeout.Token;
 
+            int version =
+                Game.TurnVersion;
+
+            int playerIndex =
+                Game.CurrentPlayerIndex;
+
             _ = Task.Run(
                 async () =>
                 {
                     try
                     {
                         await Task.Delay(
-                            TimeSpan.FromSeconds(15),
+                            TimeSpan.FromSeconds(TurnSeconds),
                             token
                         );
-
-                        if (token.IsCancellationRequested)
-                            return;
 
                         await GameLock.WaitAsync();
 
                         try
                         {
-                            if (Game == null ||
-                                !Game.Started ||
-                                !Game.WaitingForOpponent)
+                            if (Game == null)
                                 return;
 
-                            Player? current =
+                            if (!Game.Started)
+                                return;
+
+                            if (!Game.WaitingForShot)
+                                return;
+
+                            if (Game.TurnVersion != version)
+                                return;
+
+                            if (Game.CurrentPlayerIndex != playerIndex)
+                                return;
+
+                            var player =
                                 Game.CurrentPlayer;
 
-                            if (current == null)
+                            if (player == null)
                                 return;
 
-                            Game.WaitingForOpponent = false;
+                            player.Shots++;
+
+                            Game.WaitingForShot = false;
+
+                            Game.TurnVersion++;
 
                             await SendToGroup(
                                 $"⏰ انتهى الوقت!\n\n" +
-                                $"تم تخطي دور اللاعب " +
-                                $"{current.Number}️⃣."
+                                $"👤 اللاعب {player.Number}️⃣ لم يسدد.\n" +
+                                $"❌ تم احتساب التسديدة كإضاعة.\n\n" +
+                                $"🎯 التسديدات: {player.Shots}/{ShotsPerPlayer}"
                             );
 
-                            MoveToNextPlayer();
-                        }
-                        finally
-                        {
-                            GameLock.Release();
-                        }
-                    }
-                    catch (OperationCanceledException)
-                    {
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(
-                            "OPPONENT TIMEOUT ERROR:"
-                        );
-
-                        Console.WriteLine(ex);
-                    }
-                }
-            );
-        }
-
-        // =====================================================
-        // مؤقت اختيار البالونة
-        // =====================================================
-
-        private static void StartBalloonTimeout()
-        {
-            if (Game == null)
-                return;
-
-            Game.TurnTimeout?.Cancel();
-
-            Game.TurnTimeout =
-                new CancellationTokenSource();
-
-            CancellationToken token =
-                Game.TurnTimeout.Token;
-
-            _ = Task.Run(
-                async () =>
-                {
-                    try
-                    {
-                        await Task.Delay(
-                            TimeSpan.FromSeconds(15),
-                            token
-                        );
-
-                        if (token.IsCancellationRequested)
-                            return;
-
-                        await GameLock.WaitAsync();
-
-                        try
-                        {
-                            if (Game == null ||
-                                !Game.Started ||
-                                !Game.WaitingForBalloon)
-                                return;
-
-                            Player? current =
-                                Game.CurrentPlayer;
-
-                            Game.WaitingForBalloon = false;
-                            Game.SelectedOpponent = null;
-
-                            if (current != null)
+                            if (AllShotsFinished())
                             {
-                                await SendToGroup(
-                                    $"⏰ انتهى الوقت!\n\n" +
-                                    $"تم تخطي دور اللاعب " +
-                                    $"{current.Number}️⃣."
-                                );
+                                await Task.Delay(500);
+
+                                await FinishGame();
+
+                                return;
                             }
 
                             MoveToNextPlayer();
+
+                            await Task.Delay(500);
+
+                            await SendCurrentTurn();
+
+                            StartShotTimeout();
                         }
                         finally
                         {
@@ -1035,7 +916,7 @@ namespace BalloonBot
                     catch (Exception ex)
                     {
                         Console.WriteLine(
-                            "BALLOON TIMEOUT ERROR:"
+                            "TIMEOUT ERROR:"
                         );
 
                         Console.WriteLine(ex);
@@ -1044,38 +925,32 @@ namespace BalloonBot
             );
         }
 
-        // =====================================================
-        // التحقق من الفائز
-        // =====================================================
+        // =========================================================
+        // CANCEL TIMEOUT
+        // =========================================================
 
-        private static bool CheckWinner(
-            out Player? winner)
+        private static void CancelTurnTimeout()
         {
-            winner =
-                Game?.Players.FirstOrDefault(
-                    p =>
-                        !p.Eliminated &&
-                        p.Balloons > 0
-                );
-
-            if (winner == null)
-                return false;
-
-            int alive =
-                Game!.Players.Count(
-                    p =>
-                        !p.Eliminated &&
-                        p.Balloons > 0
-                );
-
-            return alive == 1;
+            try
+            {
+                if (Game?.TurnTimeout != null)
+                {
+                    Game.TurnTimeout.Cancel();
+                    Game.TurnTimeout.Dispose();
+                    Game.TurnTimeout = null;
+                }
+            }
+            catch
+            {
+            }
         }
 
-        // =====================================================
-        // إنهاء اللعبة
-        // =====================================================
+        // =========================================================
+        // STATUS
+        // =========================================================
 
-        private static async Task EndGame(Message message)
+        private static async Task ShowStatus(
+            Message message)
         {
             if (Game == null)
             {
@@ -1087,33 +962,191 @@ namespace BalloonBot
                 return;
             }
 
-            Game.TurnTimeout?.Cancel();
+            string text =
+                "⚽ حالة لعبة ضربة الجزاء ⚽\n\n";
+
+            foreach (var player in Game.Players)
+            {
+                text +=
+                    $"👤 اللاعب {player.Number}️⃣ — " +
+                    $"⚽ {player.Goals} هدف — " +
+                    $"🎯 {player.Shots}/{ShotsPerPlayer}\n";
+            }
+
+            if (Game.Started &&
+                Game.CurrentPlayer != null)
+            {
+                text +=
+                    $"\n🔥 الدور الحالي: " +
+                    $"اللاعب {Game.CurrentPlayer.Number}️⃣";
+            }
+
+            await Send(
+                message,
+                text
+            );
+        }
+
+        // =========================================================
+        // END GAME
+        // =========================================================
+
+        private static async Task EndGame(
+            Message message)
+        {
+            if (Game == null)
+            {
+                await Send(
+                    message,
+                    "❌ لا توجد لعبة لإنهائها."
+                );
+
+                return;
+            }
+
+            CancelTurnTimeout();
 
             Game = null;
 
             await Send(
                 message,
-                "🛑 تم إنهاء لعبة البالونات."
+                "🛑 تم إنهاء لعبة ضربة الجزاء."
             );
         }
 
-        // =====================================================
-        // إنهاء داخلي بعد الفوز
-        // =====================================================
+        // =========================================================
+        // FINISH GAME
+        // =========================================================
 
-        private static void FinishGame()
+        private static async Task FinishGame()
         {
             if (Game == null)
                 return;
 
-            Game.TurnTimeout?.Cancel();
+            CancelTurnTimeout();
 
+            Game.WaitingForShot = false;
             Game.Started = false;
+
+            var ranking =
+                Game.Players
+                    .OrderByDescending(
+                        p => p.Goals
+                    )
+                    .ThenBy(
+                        p => p.Shots - p.Goals
+                    )
+                    .ToList();
+
+            string text =
+                "🏆⚽ انتهت لعبة ضربة الجزاء ⚽🏆\n\n";
+
+            for (int i = 0;
+                 i < ranking.Count;
+                 i++)
+            {
+                var player =
+                    ranking[i];
+
+                string medal;
+
+                if (i == 0)
+                    medal = "🥇";
+                else if (i == 1)
+                    medal = "🥈";
+                else if (i == 2)
+                    medal = "🥉";
+                else
+                    medal = "🔹";
+
+                text +=
+                    $"{medal} اللاعب {player.Number}️⃣\n" +
+                    $"⚽ الأهداف: {player.Goals}\n" +
+                    $"🎯 التسديدات: {player.Shots}/{ShotsPerPlayer}\n\n";
+            }
+
+            int highest =
+                ranking.First().Goals;
+
+            var winners =
+                ranking
+                    .Where(
+                        p => p.Goals == highest
+                    )
+                    .ToList();
+
+            if (winners.Count == 1)
+            {
+                text +=
+                    $"👑🏆 الفائز هو اللاعب " +
+                    $"{winners[0].Number}️⃣!\n" +
+                    $"⚽ برصيد {winners[0].Goals} أهداف 🔥";
+            }
+            else
+            {
+                text +=
+                    "🤝 تعادل!\n\n" +
+                    "🏆 الفائزون:\n";
+
+                foreach (var winner in winners)
+                {
+                    text +=
+                        $"👑 اللاعب {winner.Number}️⃣ — " +
+                        $"{winner.Goals} أهداف\n";
+                }
+            }
+
+            await SendToGroup(text);
+
+            Game = null;
         }
 
-        // =====================================================
-        // إرسال رد
-        // =====================================================
+        // =========================================================
+        // DIRECTION
+        // =========================================================
+
+        private static string GetDirectionName(
+            int direction)
+        {
+            return direction switch
+            {
+                1 => "يمين ➡️",
+                2 => "وسط ⬆️",
+                3 => "يسار ⬅️",
+                _ => "غير معروف"
+            };
+        }
+
+        // =========================================================
+        // ARABIC NUMBER SUPPORT
+        // =========================================================
+
+        private static bool TryParseChoice(
+            string text,
+            out int number)
+        {
+            text =
+                text
+                    .Replace('٠', '0')
+                    .Replace('١', '1')
+                    .Replace('٢', '2')
+                    .Replace('٣', '3')
+                    .Replace('٤', '4')
+                    .Replace('٥', '5')
+                    .Replace('٦', '6')
+                    .Replace('٧', '7')
+                    .Replace('٨', '8')
+                    .Replace('٩', '9');
+
+            return int.TryParse(
+                text,
+                out number
+            );
+        }
+
+        // =========================================================
+        // REPLY
+        // =========================================================
 
         private static async Task Send(
             Message message,
@@ -1136,9 +1169,9 @@ namespace BalloonBot
             }
         }
 
-        // =====================================================
-        // إرسال مباشر للكروب
-        // =====================================================
+        // =========================================================
+        // GROUP MESSAGE
+        // =========================================================
 
         private static async Task SendToGroup(
             string text)
