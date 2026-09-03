@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="WolfLive.Api" Version="1.2.3" />
+    <PackageReference Include="WolfLive.Api.Commands" Version="1.2.3" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.7" />
   </ItemGroup>
