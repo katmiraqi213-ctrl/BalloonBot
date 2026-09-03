@@ -1863,3 +1863,241 @@ namespace PenaltyBot
                 65,
                 4,
                 new Rgba32(
+        private static async Task SendImage(
+            string groupId,
+            byte[] imageBytes)
+        {
+            try
+            {
+                if (_client == null)
+                {
+                    Console.WriteLine(
+                        "IMAGE ERROR: client is null");
+
+                    return;
+                }
+
+                if (imageBytes == null ||
+                    imageBytes.Length == 0)
+                {
+                    Console.WriteLine(
+                        "IMAGE ERROR: image is empty");
+
+                    return;
+                }
+
+                Console.WriteLine(
+                    "================================");
+
+                Console.WriteLine(
+                    "IMAGE TEST");
+
+                Console.WriteLine(
+                    "Group: " +
+                    groupId);
+
+                Console.WriteLine(
+                    "Bytes: " +
+                    imageBytes.Length);
+
+                var result =
+                    await _client.GroupMessage(
+                        groupId,
+                        imageBytes);
+
+                Console.WriteLine(
+                    "IMAGE SENT!");
+
+                Console.WriteLine(
+                    "Response: " +
+                    result);
+
+                Console.WriteLine(
+                    "================================");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    "IMAGE SEND ERROR:");
+
+                Console.WriteLine(
+                    ex.ToString());
+            }
+        }
+
+        private static string GetMessageText(
+            object obj)
+        {
+            if (obj == null)
+                return "";
+
+            string[] names =
+            {
+                "Text",
+                "Message",
+                "Content",
+                "Body",
+                "MessageText"
+            };
+
+            foreach (string name in names)
+            {
+                string value =
+                    GetStringProperty(
+                        obj,
+                        name);
+
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            return "";
+        }
+
+        private static string GetGroupId(
+            object obj)
+        {
+            if (obj == null)
+                return "";
+
+            string[] names =
+            {
+                "GroupId",
+                "GroupID",
+                "RoomId",
+                "RoomID",
+                "ChatId",
+                "ChatID",
+                "ConversationId",
+                "ConversationID"
+            };
+
+            foreach (string name in names)
+            {
+                string value =
+                    GetStringProperty(
+                        obj,
+                        name);
+
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            return "";
+        }
+
+        private static string GetUserId(
+            object obj)
+        {
+            if (obj == null)
+                return "";
+
+            string[] names =
+            {
+                "UserId",
+                "UserID",
+                "SenderId",
+                "SenderID",
+                "FromId",
+                "FromID",
+                "AuthorId",
+                "AuthorID"
+            };
+
+            foreach (string name in names)
+            {
+                string value =
+                    GetStringProperty(
+                        obj,
+                        name);
+
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            return "";
+        }
+
+        private static string GetUserName(
+            object obj)
+        {
+            if (obj == null)
+                return "";
+
+            string[] names =
+            {
+                "UserName",
+                "Username",
+                "Name",
+                "SenderName",
+                "DisplayName",
+                "NickName",
+                "Nickname"
+            };
+
+            foreach (string name in names)
+            {
+                string value =
+                    GetStringProperty(
+                        obj,
+                        name);
+
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            return "";
+        }
+
+        private static object? GetObjectProperty(
+            object obj,
+            string propertyName)
+        {
+            try
+            {
+                var property =
+                    obj.GetType().GetProperty(
+                        propertyName,
+                        BindingFlags.Instance |
+                        BindingFlags.Public |
+                        BindingFlags.IgnoreCase);
+
+                return property?.GetValue(obj);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string GetStringProperty(
+            object obj,
+            string propertyName)
+        {
+            try
+            {
+                var property =
+                    obj.GetType().GetProperty(
+                        propertyName,
+                        BindingFlags.Instance |
+                        BindingFlags.Public |
+                        BindingFlags.IgnoreCase);
+
+                if (property == null)
+                    return "";
+
+                object? value =
+                    property.GetValue(obj);
+
+                if (value == null)
+                    return "";
+
+                return value.ToString() ?? "";
+            }
+            catch
+            {
+                return "";
+            }
+        }
+    }
+                    }
