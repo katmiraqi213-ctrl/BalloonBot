@@ -45,6 +45,9 @@ namespace PenaltyBot
 
         public int CurrentPlayerIndex { get; set; }
 
+        // الجولة الحالية من 1 إلى 5
+        public int CurrentRound { get; set; }
+
         public bool Started { get; set; }
 
         public bool TurnAnswered { get; set; }
@@ -65,9 +68,10 @@ namespace PenaltyBot
         private const int MaxPlayers = 10;
         private const int MinPlayers = 2;
 
-        private const int ShotsPerPlayer = 5;
+        // عدد الجولات
+        private const int TotalRounds = 5;
 
-        // وقت التسديدة
+        // وقت كل تسديدة
         private const int TurnSeconds = 25;
 
         private static readonly ConcurrentDictionary<
@@ -122,11 +126,6 @@ namespace PenaltyBot
                 Console.WriteLine("Creating Wolf client...");
 
                 _client = new WolfClient();
-
-                // ====================================================
-                // أهم جزء:
-                // ربط الرسائل بالطريقة الرسمية للمكتبة
-                // ====================================================
 
                 _client.Messaging.OnMessage +=
                     OnWolfMessage;
@@ -351,15 +350,9 @@ namespace PenaltyBot
         {
             return text
                 .Trim()
-                .Replace(
-                    "أ",
-                    "ا")
-                .Replace(
-                    "إ",
-                    "ا")
-                .Replace(
-                    "آ",
-                    "ا")
+                .Replace("أ", "ا")
+                .Replace("إ", "ا")
+                .Replace("آ", "ا")
                 .ToLowerInvariant();
         }
 
@@ -389,6 +382,9 @@ namespace PenaltyBot
 
                 "!جزاء انهاء\n" +
                 "إنهاء اللعبة\n\n" +
+
+                "🏆 اللعبة 5 جولات\n" +
+                "⚽ كل لاعب يسدد مرة في كل جولة.\n\n" +
 
                 "بعد بدء اللعبة:\n" +
                 "1️⃣ يسار\n" +
@@ -525,7 +521,9 @@ namespace PenaltyBot
                     " | أهداف: " +
                     player.Goals +
                     " | تسديدات: " +
-                    player.Shots);
+                    player.Shots +
+                    "/" +
+                    TotalRounds);
             }
 
             sb.AppendLine();
@@ -584,21 +582,28 @@ namespace PenaltyBot
                 player.Eliminated = false;
             }
 
+            // تبدأ من الجولة الأولى
+            game.CurrentRound = 1;
+
+            // أول لاعب
             game.CurrentPlayerIndex = 0;
+
             game.Started = true;
             game.TurnAnswered = false;
 
             await SendMessage(
                 groupId,
-                "🔥 بدأت لعبة الجزاء!\n\n" +
+                "🔥🔥 بدأت لعبة الجزاء! 🔥🔥\n\n" +
 
-                "عدد اللاعبين: " +
+                "👥 عدد اللاعبين: " +
                 game.Players.Count +
-                "\n" +
+                "\n\n" +
 
-                "كل لاعب لديه " +
-                ShotsPerPlayer +
-                " تسديدات.\n\n" +
+                "🏆 عدد الجولات: " +
+                TotalRounds +
+                "\n\n" +
+
+                "⚽ كل لاعب يسدد مرة واحدة في كل جولة.\n\n" +
 
                 "⏱ وقت كل تسديدة: " +
                 TurnSeconds +
@@ -621,7 +626,6 @@ namespace PenaltyBot
             if (!game.Started)
                 return;
 
-            // إلغاء المؤقت القديم
             try
             {
                 game.TurnCancellation?.Cancel();
@@ -639,8 +643,10 @@ namespace PenaltyBot
                     game.Players[
                         game.CurrentPlayerIndex];
 
+                // اللاعب لم يخرج
+                // ولم يسدد في الجولة الحالية
                 if (!player.Eliminated &&
-                    player.Shots < ShotsPerPlayer)
+                    player.Shots == game.CurrentRound - 1)
                 {
                     break;
                 }
@@ -648,11 +654,49 @@ namespace PenaltyBot
                 game.CurrentPlayerIndex++;
             }
 
-            // انتهت اللعبة
+            // جميع اللاعبين أنهوا الجولة
             if (game.CurrentPlayerIndex >=
                 game.Players.Count)
             {
-                await FinishGame(game);
+                var activePlayers =
+                    game.Players
+                        .Where(
+                            p => !p.Eliminated)
+                        .ToList();
+
+                // لم يبقَ إلا لاعب واحد
+                if (activePlayers.Count <= 1)
+                {
+                    await FinishGame(game);
+                    return;
+                }
+
+                // انتهت الجولة الخامسة
+                if (game.CurrentRound >= TotalRounds)
+                {
+                    await FinishGame(game);
+                    return;
+                }
+
+                // الانتقال للجولة التالية
+                game.CurrentRound++;
+
+                game.CurrentPlayerIndex = 0;
+
+                await SendMessage(
+                    game.GroupId,
+                    "🔥🔥 انتهت الجولة السابقة! 🔥🔥\n\n" +
+
+                    "🏆 الجولة " +
+                    game.CurrentRound +
+                    "/" +
+                    TotalRounds +
+                    " بدأت!\n\n" +
+
+                    "⚽ كل لاعب يسدد مرة واحدة.");
+
+                await StartTurn(game);
+
                 return;
             }
 
@@ -666,7 +710,7 @@ namespace PenaltyBot
                 Interlocked.Increment(
                     ref _turnCounter);
 
-            var turnId =
+            long turnId =
                 game.TurnId;
 
             var cts =
@@ -681,10 +725,16 @@ namespace PenaltyBot
                 currentPlayer.Name +
                 "\n\n" +
 
-                "التسديدة رقم " +
-                (currentPlayer.Shots + 1) +
+                "🏆 الجولة: " +
+                game.CurrentRound +
                 "/" +
-                ShotsPerPlayer +
+                TotalRounds +
+                "\n\n" +
+
+                "🎯 تسديدتك رقم: " +
+                currentPlayer.Shots +
+                "/" +
+                TotalRounds +
                 "\n\n" +
 
                 "اختر اتجاه التسديدة:\n" +
@@ -697,13 +747,13 @@ namespace PenaltyBot
                 TurnSeconds +
                 " ثانية.");
 
-            // إرسال صورة الملعب
+            // الصورة
             try
             {
                 byte[] image =
                     CreatePenaltyImage(
                         currentPlayer.Name,
-                        currentPlayer.Shots + 1);
+                        game.CurrentRound);
 
                 await SendImage(
                     game.GroupId,
@@ -763,10 +813,7 @@ namespace PenaltyBot
             if (player == null)
                 return;
 
-            // مهم:
-            // لا نطرده من الروم.
-            // فقط نخرجه من لعبة الجزاء.
-
+            // اللاعب يخرج من اللعبة فقط
             player.Eliminated = true;
 
             game.TurnAnswered = true;
@@ -784,7 +831,7 @@ namespace PenaltyBot
                 "🚪 خرج من لعبة الجزاء فقط.\n" +
                 "⚠️ لم يتم طرده من الروم.");
 
-            // ننتقل للاعب التالي هنا مرة واحدة فقط
+            // الانتقال للاعب التالي
             game.CurrentPlayerIndex++;
 
             await CheckGameAfterTurn(
@@ -817,9 +864,7 @@ namespace PenaltyBot
             }
 
             if (game.TurnAnswered)
-            {
                 return;
-            }
 
             if (game.CurrentPlayerIndex <
                 0 ||
@@ -845,8 +890,8 @@ namespace PenaltyBot
             if (player.Eliminated)
                 return;
 
-            if (player.Shots >=
-                ShotsPerPlayer)
+            // اللاعب يسدد مرة واحدة في الجولة
+            if (player.Shots >= TotalRounds)
                 return;
 
             game.TurnAnswered = true;
@@ -859,7 +904,6 @@ namespace PenaltyBot
             {
             }
 
-            // حارس عشوائي
             int keeper =
                 Random.Shared.Next(
                     1,
@@ -894,6 +938,12 @@ namespace PenaltyBot
                     player.Name +
                     "\n" +
 
+                    "🏆 الجولة: " +
+                    game.CurrentRound +
+                    "/" +
+                    TotalRounds +
+                    "\n" +
+
                     "التسديدة: " +
                     shotName +
                     "\n" +
@@ -909,7 +959,7 @@ namespace PenaltyBot
                     "📊 التسديدات: " +
                     player.Shots +
                     "/" +
-                    ShotsPerPlayer);
+                    TotalRounds);
 
                 try
                 {
@@ -938,6 +988,12 @@ namespace PenaltyBot
                     player.Name +
                     "\n" +
 
+                    "🏆 الجولة: " +
+                    game.CurrentRound +
+                    "/" +
+                    TotalRounds +
+                    "\n" +
+
                     "التسديدة: " +
                     shotName +
                     "\n" +
@@ -953,7 +1009,7 @@ namespace PenaltyBot
                     "📊 التسديدات: " +
                     player.Shots +
                     "/" +
-                    ShotsPerPlayer);
+                    TotalRounds);
 
                 try
                 {
@@ -980,7 +1036,7 @@ namespace PenaltyBot
         }
 
         // ============================================================
-        // CHECK GAME
+        // CHECK GAME AFTER TURN
         // ============================================================
 
         private static async Task CheckGameAfterTurn(
@@ -995,19 +1051,42 @@ namespace PenaltyBot
                         p => !p.Eliminated)
                     .ToList();
 
+            // بقي لاعب واحد
             if (activePlayers.Count <= 1)
             {
                 await FinishGame(game);
                 return;
             }
 
-            bool allFinished =
+            // هل كل اللاعبين أكملوا الجولة الحالية؟
+            bool roundFinished =
                 activePlayers.All(
-                    p => p.Shots >= ShotsPerPlayer);
+                    p => p.Shots >= game.CurrentRound);
 
-            if (allFinished)
+            if (roundFinished)
             {
-                await FinishGame(game);
+                // انتهت الجولة الخامسة
+                if (game.CurrentRound >= TotalRounds)
+                {
+                    await FinishGame(game);
+                    return;
+                }
+
+                // الجولة التالية
+                game.CurrentRound++;
+
+                game.CurrentPlayerIndex = 0;
+
+                await SendMessage(
+                    game.GroupId,
+                    "🔥 الجولة " +
+                    game.CurrentRound +
+                    "/" +
+                    TotalRounds +
+                    " بدأت!");
+
+                await StartTurn(game);
+
                 return;
             }
 
@@ -1048,6 +1127,17 @@ namespace PenaltyBot
             sb.AppendLine(
                 state);
 
+            if (game.Started)
+            {
+                sb.AppendLine();
+
+                sb.AppendLine(
+                    "🏆 الجولة: " +
+                    game.CurrentRound +
+                    "/" +
+                    TotalRounds);
+            }
+
             sb.AppendLine();
 
             foreach (var player in game.Players)
@@ -1075,11 +1165,14 @@ namespace PenaltyBot
                     game.Players[
                         game.CurrentPlayerIndex];
 
-                sb.AppendLine();
+                if (!current.Eliminated)
+                {
+                    sb.AppendLine();
 
-                sb.AppendLine(
-                    "🎯 الدور: " +
-                    current.Name);
+                    sb.AppendLine(
+                        "🎯 الدور: " +
+                        current.Name);
+                }
             }
 
             await SendMessage(
@@ -1163,6 +1256,13 @@ namespace PenaltyBot
 
             sb.AppendLine();
 
+            sb.AppendLine(
+                "🎯 تم لعب " +
+                TotalRounds +
+                " جولات.");
+
+            sb.AppendLine();
+
             if (winner != null)
             {
                 sb.AppendLine(
@@ -1182,12 +1282,14 @@ namespace PenaltyBot
             sb.AppendLine();
 
             sb.AppendLine(
-                "📊 النتائج:");
+                "📊 النتائج النهائية:");
 
             foreach (var player in
                      game.Players
                          .OrderByDescending(
-                             p => p.Goals))
+                             p => p.Goals)
+                         .ThenByDescending(
+                             p => p.Shots))
             {
                 sb.AppendLine(
                     player.Name +
@@ -1863,9 +1965,8 @@ namespace PenaltyBot
 
         // ============================================================
         // FILL RECT
-        // ============================================================
-
-        private static void FillRect(
+        // ==========================
+                private static void FillRect(
             Image<Rgba32> image,
             int x,
             int y,
@@ -1873,224 +1974,196 @@ namespace PenaltyBot
             int height,
             Rgba32 color)
         {
-            int xStart =
-                Math.Max(
-                    0,
-                    x);
+            int xStart = Math.Max(0, x);
+            int yStart = Math.Max(0, y);
+            int xEnd = Math.Min(image.Width, x + width);
+            int yEnd = Math.Min(image.Height, y + height);
 
-            int yStart =
-                Math.Max(
-                    0,
-                    y);
-
-            int xEnd =
-                Math.Min(
-                    image.Width,
-                    x + width);
-
-            int yEnd =
-                Math.Min(
-                    image.Height,
-                    y + height);
-
-            if (xStart >= xEnd ||
-                yStart >= yEnd)
+            if (xStart >= xEnd || yStart >= yEnd)
                 return;
 
-            image.ProcessPixelRows(
-                accessor =>
+            image.ProcessPixelRows(accessor =>
+            {
+                for (int yy = yStart; yy < yEnd; yy++)
                 {
-                    for (int yy = yStart;
-                         yy < yEnd;
-                         yy++)
-                    {
-                        Span<Rgba32> row =
-                            accessor.GetRowSpan(
-                                yy);
+                    Span<Rgba32> row = accessor.GetRowSpan(yy);
 
-                        for (int xx = xStart;
-                             xx < xEnd;
-                             xx++)
-                        {
-                            row[xx] = color;
-                        }
+                    for (int xx = xStart; xx < xEnd; xx++)
+                    {
+                        row[xx] = color;
                     }
-                });
+                }
+            });
         }
 
         // ============================================================
-// DRAW LINE
-// ============================================================
-private static void DrawRect(
-    Image<Rgba32> image,
-    int x,
-    int y,
-    int width,
-    int height,
-    int thickness,
-    Rgba32 color)
-{
-    // أعلى
-    FillRect(
-        image,
-        x,
-        y,
-        width,
-        thickness,
-        color);
+        // DRAW RECT
+        // ============================================================
 
-    // أسفل
-    FillRect(
-        image,
-        x,
-        y + height - thickness,
-        width,
-        thickness,
-        color);
-
-    // يسار
-    FillRect(
-        image,
-        x,
-        y,
-        thickness,
-        height,
-        color);
-
-    // يمين
-    FillRect(
-        image,
-        x + width - thickness,
-        y,
-        thickness,
-        height,
-        color);
-}
-
-
-private static void DrawCircle(
-    Image<Rgba32> image,
-    int centerX,
-    int centerY,
-    int radius,
-    int thickness,
-    Rgba32 color)
-{
-    if (thickness < 1)
-        thickness = 1;
-
-    int outerRadius = radius;
-    int innerRadius = Math.Max(0, radius - thickness);
-
-    int outerSquared = outerRadius * outerRadius;
-    int innerSquared = innerRadius * innerRadius;
-
-    int minX = Math.Max(0, centerX - outerRadius);
-    int maxX = Math.Min(image.Width - 1, centerX + outerRadius);
-
-    int minY = Math.Max(0, centerY - outerRadius);
-    int maxY = Math.Min(image.Height - 1, centerY + outerRadius);
-
-    for (int y = minY; y <= maxY; y++)
-    {
-        for (int x = minX; x <= maxX; x++)
+        private static void DrawRect(
+            Image<Rgba32> image,
+            int x,
+            int y,
+            int width,
+            int height,
+            int thickness,
+            Rgba32 color)
         {
-            int dx = x - centerX;
-            int dy = y - centerY;
+            FillRect(image, x, y, width, thickness, color);
+            FillRect(image, x, y + height - thickness, width, thickness, color);
+            FillRect(image, x, y, thickness, height, color);
+            FillRect(
+                image,
+                x + width - thickness,
+                y,
+                thickness,
+                height,
+                color);
+        }
 
-            int distanceSquared =
-                dx * dx + dy * dy;
+        // ============================================================
+        // DRAW CIRCLE
+        // ============================================================
 
-            if (distanceSquared <= outerSquared &&
-                distanceSquared >= innerSquared)
+        private static void DrawCircle(
+            Image<Rgba32> image,
+            int centerX,
+            int centerY,
+            int radius,
+            int thickness,
+            Rgba32 color)
+        {
+            if (thickness < 1)
+                thickness = 1;
+
+            int outerRadius = radius;
+            int innerRadius = Math.Max(0, radius - thickness);
+
+            int outerSquared = outerRadius * outerRadius;
+            int innerSquared = innerRadius * innerRadius;
+
+            int minX = Math.Max(0, centerX - outerRadius);
+            int maxX = Math.Min(image.Width - 1, centerX + outerRadius);
+
+            int minY = Math.Max(0, centerY - outerRadius);
+            int maxY = Math.Min(image.Height - 1, centerY + outerRadius);
+
+            for (int y = minY; y <= maxY; y++)
             {
-                image[x, y] = color;
+                for (int x = minX; x <= maxX; x++)
+                {
+                    int dx = x - centerX;
+                    int dy = y - centerY;
+
+                    int distanceSquared = dx * dx + dy * dy;
+
+                    if (distanceSquared <= outerSquared &&
+                        distanceSquared >= innerSquared)
+                    {
+                        image[x, y] = color;
+                    }
+                }
+            }
+        }
+
+        // ============================================================
+        // DRAW LINE
+        // ============================================================
+
+        private static void DrawLine(
+            Image<Rgba32> image,
+            int x1,
+            int y1,
+            int x2,
+            int y2,
+            int thickness,
+            Rgba32 color)
+        {
+            int dx = x2 - x1;
+            int dy = y2 - y1;
+
+            int steps = Math.Max(
+                Math.Abs(dx),
+                Math.Abs(dy));
+
+            if (steps == 0)
+            {
+                FillCircle(
+                    image,
+                    x1,
+                    y1,
+                    Math.Max(1, thickness / 2),
+                    color);
+
+                return;
+            }
+
+            double stepX = (double)dx / steps;
+            double stepY = (double)dy / steps;
+
+            double x = x1;
+            double y = y1;
+
+            int radius = Math.Max(
+                1,
+                thickness / 2);
+
+            for (int i = 0; i <= steps; i++)
+            {
+                FillCircle(
+                    image,
+                    (int)Math.Round(x),
+                    (int)Math.Round(y),
+                    radius,
+                    color);
+
+                x += stepX;
+                y += stepY;
+            }
+        }
+
+        // ============================================================
+        // FILL CIRCLE
+        // ============================================================
+
+        private static void FillCircle(
+            Image<Rgba32> image,
+            int centerX,
+            int centerY,
+            int radius,
+            Rgba32 color)
+        {
+            int radiusSquared = radius * radius;
+
+            int minX = Math.Max(
+                0,
+                centerX - radius);
+
+            int maxX = Math.Min(
+                image.Width - 1,
+                centerX + radius);
+
+            int minY = Math.Max(
+                0,
+                centerY - radius);
+
+            int maxY = Math.Min(
+                image.Height - 1,
+                centerY + radius);
+
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    int dx = x - centerX;
+                    int dy = y - centerY;
+
+                    if (dx * dx + dy * dy <= radiusSquared)
+                    {
+                        image[x, y] = color;
+                    }
+                }
             }
         }
     }
 }
-private static void DrawLine(
-    Image<Rgba32> image,
-    int x1,
-    int y1,
-    int x2,
-    int y2,
-    int thickness,
-    Rgba32 color)
-{
-    int dx = x2 - x1;
-    int dy = y2 - y1;
-
-    int steps = Math.Max(
-        Math.Abs(dx),
-        Math.Abs(dy));
-
-    if (steps == 0)
-    {
-        FillCircle(
-            image,
-            x1,
-            y1,
-            Math.Max(1, thickness / 2),
-            color);
-
-        return;
-    }
-
-    double stepX = (double)dx / steps;
-    double stepY = (double)dy / steps;
-
-    double x = x1;
-    double y = y1;
-
-    int radius = Math.Max(1, thickness / 2);
-
-    for (int i = 0; i <= steps; i++)
-    {
-        FillCircle(
-            image,
-            (int)Math.Round(x),
-            (int)Math.Round(y),
-            radius,
-            color);
-
-        x += stepX;
-        y += stepY;
-    }
-}
-
-// ============================================================
-// FILL CIRCLE
-// ============================================================
-
-private static void FillCircle(
-    Image<Rgba32> image,
-    int centerX,
-    int centerY,
-    int radius,
-    Rgba32 color)
-{
-    int radiusSquared = radius * radius;
-
-    int minX = Math.Max(0, centerX - radius);
-    int maxX = Math.Min(image.Width - 1, centerX + radius);
-
-    int minY = Math.Max(0, centerY - radius);
-    int maxY = Math.Min(image.Height - 1, centerY + radius);
-
-    for (int y = minY; y <= maxY; y++)
-    {
-        for (int x = minX; x <= maxX; x++)
-        {
-            int dx = x - centerX;
-            int dy = y - centerY;
-
-            if (dx * dx + dy * dy <= radiusSquared)
-            {
-                image[x, y] = color;
-            }
-        }
-    }
-}
-} 
-} 
