@@ -1,12 +1,10 @@
 using System;
-using System.Collections.Generic;
-using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using WolfLive.Api; // مكتبة ولف الرسمية
+using WolfLive.Api;
 
 namespace BalloonBot
 {
@@ -39,27 +37,22 @@ namespace BalloonBot
                 return;
             }
 
-            // 2. إعداد الهيدرز العامة على مستوى التطبيق بالكامل لتخطي قيود المكتبة
-            // هذا السطر يقوم بحقن التوكن تلقائياً في أي طلب شبكة يخرج من البوت إلى ولف
-            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator = true;
-            
-            // 3. إنشاء كائن اتصال ولف القياسي (بدون تعديل خيارات معقدة لتجنب أخطاء البناء)
+            // 2. إنشاء كائن اتصال ولف القياسي
             _client = new WolfClient();
 
-            // 4. محاولة تشغيل البوت والاتصال
+            // 3. محاولة تشغيل البوت والاتصال الفعلي بالسيرفرات
             try
             {
-                // مكتبة ولف الإصدار 1.2.3 تستخدم دالة ConnectAsync أو دالة تشغيلية مخصصة للربط
-                // لتفادي أخطاء المسميات، نستخدم الدالة المباشرة المتاحة بالمكتبة للاتصال بالحساب:
-                await _client.ConnectAsync(botEmail, botPassword);
-                Console.WriteLine("تم اتصال BalloonBot بنجاح وهو الآن يتخطى الحماية تلقائياً عبر الشبكة!");
+                // دالة الاتصال الرسمية لبدء تشغيل العميل والاستماع في إصدار المكتبة 1.2.3
+                await _client.StartAsync();
+                Console.WriteLine("تم اتصال BalloonBot بنجاح وهو الآن يعمل في الخلفية!");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"فشل الاتصال بالسيرفر: {ex.Message}");
             }
 
-            // إبقاء الكونسول مفتوحاً في سيرفر جيت هاب
+            // إبقاء الكونسول مفتوحاً في سيرفر جيت هاب لمنع إغلاق البوت
             await Task.Delay(-1);
         }
     }
@@ -76,9 +69,12 @@ namespace BalloonBot
 
         public AppCheckService()
         {
-            _httpClient = new HttpClient();
-            // إضافة الهيدرز الافتراضية للاتصال بسيرفر جوجل
-            _httpClient.DefaultRequestHeaders.Clear();
+            // إعداد HttpClient مع تخطي التحقق من الشهادات بشكل صحيح ومتوافق مع دوت نت 8
+            var handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            };
+            _httpClient = new HttpClient(handler);
         }
 
         public async Task StartAsync(CancellationToken cancellationToken = default)
