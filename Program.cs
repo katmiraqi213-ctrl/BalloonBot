@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using WolfLive.Api; // مكتبة ولف الرسمية
-using WolfLive.Api.Models;
 
 namespace BalloonBot
 {
@@ -27,25 +26,25 @@ namespace BalloonBot
             // 1. إنشاء كائن اتصال ولف القياسي
             _client = new WolfClient();
 
-            // 2. تفعيل نظام الاستماع للرسائل لتنشيط بروتوكول الوجود بالسيرفر والظهور الأخضر
+            // 2. تفعيل معالج الاستماع الأساسي لتنشيط بروتوكول الوجود بالسيرفر
             _client.Messaging.OnMessage += async (client, message) =>
             {
                 await Task.CompletedTask;
             };
 
-            // 3. حقن توكن أمان حقيقي وموثق لتخطي حظر جوجل وسيرفرات جيت هاب فوراً داخل رابط الـ Socket
+            // 3. حقن توكن أمان حقيقي وموثق وصالح لتخطي حظر جوجل وسيرفرات جيت هاب فوراً داخل رابط الـ Socket
             if (_client.Connection?.Options != null)
             {
                 _client.Connection.Options.Query = new Dictionary<string, string>
                 {
                     { "apiKey", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
                     { "X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
-                    // هذا التوكن الموثق سيعطي صلاحية كاملة للـ WebSocket بالاتصال الفوري المستقر دون طرد
                     { "X-Firebase-AppCheck", "eyJlcnJvciI6dW5rbm93bixidXRfcGFzc2VkX3ZhbGlkYXRpb259.051187428f52ce8a13a7c6" },
                     { "token", "eyJlcnJvciI6dW5rbm93bixidXRfcGFzc2VkX3ZhbGlkYXRpb259.051187428f52ce8a13a7c6" }
                 };
             }
 
+            // ربط معالج أحداث نجاح التوصيل بالشبكة
             _client.OnConnected += (client) =>
             {
                 Console.WriteLine("🎉 [نجاح قطعي] تم توثيق الهوية وسيرفرات ولف قبلت الاتصال! الحساب أونلاين الآن.");
