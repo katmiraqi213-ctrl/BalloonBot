@@ -10,16 +10,17 @@ namespace BalloonBot
 {
     class Program
     {
-        private static IWolfClient _client;
+        // استخدام النوع المباشر WolfClient للوصول إلى الخصائص الداخلية
+        private static WolfClient _client;
         private static AppCheckService _appCheckService;
 
         static async Task Main(string[] args)
         {
             Console.WriteLine("=== جاري تشغيل بوت BalloonBot مع حماية AppCheck ===");
 
-            // قراءة الإيميل والباسورد من متغيرات البيئة (GitHub Secrets) لضمان الأمان
-            string botEmail = Environment.GetEnvironmentVariable("WOLF_EMAIL");
-            string botPassword = Environment.GetEnvironmentVariable("WOLF_PASSWORD");
+            // قراءة الإيميل والباسورد من متغيرات البيئة الأمنيّة في جيت هاب
+            string botEmail = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? string.Empty;
+            string botPassword = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? string.Empty;
 
             if (string.IsNullOrEmpty(botEmail) || string.IsNullOrEmpty(botPassword))
             {
@@ -40,21 +41,21 @@ namespace BalloonBot
             // 2. إنشاء كائن الاتصال بالمكتبة
             _client = new WolfClient();
 
-            // 3. حقن الهيدرز الأساسية لتخطي جدار الحماية
-            _client.Headers["X-Firebase-API-Key"] = "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc";
-            _client.Headers["X-Firebase-AppCheck"] = _appCheckService.CurrentToken;
+            // 3. حقن الهيدرز الأساسية لتخطي جدار الحماية (باستخدام خاصية إعدادات الاتصال الصحيحة في مكتبة ولف)
+            _client.Connection.Options.SetRequestHeader("X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc");
+            _client.Connection.Options.SetRequestHeader("X-Firebase-AppCheck", _appCheckService.CurrentToken);
 
-            // 4. تحديث التوكن في الهيدرز عند إعادة الاتصال التلقائي
-            _client.OnDisconnected += async (s, e) => 
+            // 4. تحديث التوكن في الهيدرز عند إعادة الاتصال تلقائياً (الحدث الصحيح بالمكتبة هو OnDisconnect)
+            _client.OnDisconnect += (s, e) => 
             {
-                Console.WriteLine("انقطع اتصال البوت! جاري تحديث التوكن وتجهيز الهيدرز...");
-                _client.Headers["X-Firebase-AppCheck"] = _appCheckService.CurrentToken;
+                Console.WriteLine("انقطع اتصال البوت! جاري تحديث التوكن وتجهيز الهيدرز لإعادة الاتصال...");
+                _client.Connection.Options.SetRequestHeader("X-Firebase-AppCheck", _appCheckService.CurrentToken);
             };
 
-            // 5. محاولة تسجيل الدخول
+            // 5. محاولة تسجيل الدخول والاتصال (الدالة الصحيحة في مكتبة ولف هي LoginAsync)
             try
             {
-                await _client.ConnectAsync(botEmail, botPassword); 
+                await _client.LoginAsync(botEmail, botPassword); 
                 Console.WriteLine("تم اتصال BalloonBot بنجاح وهو الآن يتخطى الحماية تلقائياً!");
             }
             catch (Exception ex)
@@ -62,10 +63,12 @@ namespace BalloonBot
                 Console.WriteLine($"فشل الاتصال بالسيرفر: {ex.Message}");
             }
 
+            // إبقاء الكونسول مفتوحاً
             await Task.Delay(-1);
         }
     }
 
+    // === الخدمة المسؤولة عن توليد وتحديث التوكن تلقائياً دون انقطاع ===
     public class AppCheckService
     {
         private readonly HttpClient _httpClient;
