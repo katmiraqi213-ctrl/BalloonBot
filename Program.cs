@@ -44,23 +44,25 @@ namespace BalloonBot
                 };
             }
 
-            // 4. فرض دخول الروم فور نجاح التوصيل ليتحول إلى أونلاين أخضر عبر دالة Emit أو الـ WebSockets
+            // 4. فرض تحديث الحالة العامة إلى أونلاين ودخول الروم فوراً عبر التحديث الأمني الجديد
             _client.OnConnected += async (client) =>
             {
                 Console.WriteLine("🎉 [نجاح قطعي] تم توثيق الهوية وسيرفرات ولف قبلت الاتصال!");
                 
                 try
                 {
-                    Console.WriteLine("🔄 جاري إرسال حزمة الوجود الرقمي ودخول الروم لتنشيط الـ Online الأخضر...");
+                    Console.WriteLine("🔄 جاري إرسال حزم تنشيط الـ Online الأخضر والوجود الرقمي...");
                     
-                    // استبدل رقم (1234567) بالـ ID الحقيقي لغرفتك أو الروم الخاص بك في ولف
-                    int TargetGroupId = 1234567; 
-                    
-                    // استخدام المحاكي البرمجي الأضمن في حزم ولف لإرسال إخطار الاشتراك والوجود بالروم
                     if (_client.Connection != null)
                     {
+                        // أ: فرض إرسال حزمة تحديث الحالة الصريحة لنظام ولف الجديد ليتغير اللون للأخضر
+                        await _client.Connection.EmitAsync("presence update", new { status = "online", type = "bot" });
+                        
+                        // ب: استبدل رقم (1234567) بالـ ID الحقيقي لغرفتك أو الروم الخاص بك في ولف ليدخله البوت
+                        int TargetGroupId = 1234567; 
                         await _client.Connection.EmitAsync("group subscribe", new { id = TargetGroupId });
-                        Console.WriteLine("✅ تم إرسال حزمة الدخول والنشاط بنجاح! الحساب الآن أونلاين.");
+                        
+                        Console.WriteLine("✅ تم تنشيط الحالة أونلاين وإخطار الغرفة بنجاح!");
                     }
                 }
                 catch (Exception ex)
