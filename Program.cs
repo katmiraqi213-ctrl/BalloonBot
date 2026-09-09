@@ -1,5 +1,4 @@
 using System;
-using System.Net.Http;
 using System.Threading.Tasks;
 using WolfLive.Api; // مكتبة ولف الرسمية
 
@@ -7,7 +6,7 @@ namespace BalloonBot
 {
     class Program
     {
-        private static IWolfClient? _client;
+        private static WolfClient? _client;
 
         static async Task Main(string[] args)
         {
@@ -23,35 +22,22 @@ namespace BalloonBot
                 return;
             }
 
-            // إعداد معالج اتصال متوافق وسليم في دوت نت 8 لتفادي خطأ القراءة فقط
-            var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
-            };
-
-            // 1. إنشاء كائن اتصال ولف القياسي
+            // 1. إنشاء كائن اتصال ولف القياسي جداً المتوافق مع إصدار المكتبة 1.2.3
             _client = new WolfClient();
 
-            // 2. محاولة تسجيل الدخول والاتصال الفعلي لرفع الحساب أونلاين
+            // 2. ربط معالج الأحداث لطباعة نجاح الدخول الفعلي فور حدوثه
+            _client.OnConnected += (sender, e) =>
+            {
+                Console.WriteLine("🎉 إنجاز رائع! البوت متصل الآن بنجاح وأونلاين 100% داخل WOLF!");
+            };
+
+            // 3. محاولة تسجيل الدخول والاتصال الفعلي لرفع الحساب أونلاين
             try
             {
                 Console.WriteLine("📡 جاري إرسال طلب تسجيل الدخول الفعلي إلى ولف...");
                 
-                // استخدام دوال تسجيل الدخول الأصلية المعتمدة في سورس البوت
-                bool loginResult = await _client.Login(botEmail, botPassword);
-
-                if (!loginResult)
-                {
-                    Console.WriteLine("❌ فشل تسجيل الدخول إلى ولف. تأكد من صحة بيانات الحساب.");
-                    return;
-                }
-
-                Console.WriteLine("✅ تم تسجيل الدخول بنجاح! جاري فتح قنوات الـ Websocket...");
-                
-                // الدالة المسؤولة عن رفع الحساب أونلاين داخل الغرف والتطبيق
-                await _client.Connect();
-                
-                Console.WriteLine("🎉 إنجاز رائع! البوت متصل الآن بنجاح وأونلاين 100% داخل WOLF!");
+                // استخدام دالة الدخول والربط الحقيقية المباشرة للمكتبة 1.2.3 
+                await _client.LoginAsync(botEmail, botPassword);
             }
             catch (Exception ex)
             {
@@ -59,7 +45,7 @@ namespace BalloonBot
             }
 
             // إبقاء الكونسول نشطاً في سيرفر جيت هاب لمنع إغلاق البوت تلقائياً
-            await Task.Delay(Timeout.Infinite);
+            await Task.Delay(-1);
         }
     }
 }
