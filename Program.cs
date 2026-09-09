@@ -23,19 +23,21 @@ namespace BalloonBot
                 return;
             }
 
-            // 1. إعداد معالج الحقن والشبكة لتخطي الحماية
-            // قمنا بإلغاء دالة جلب التوكن البرمجية لتفادي حظر سيرفرات جيت هاب (Firewall)
-            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator = (message, cert, chain, errors) => true;
+            // إعداد معالج اتصال متوافق وسليم في دوت نت 8 لتفادي خطأ القراءة فقط
+            var handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+            };
 
-            // 2. إنشاء كائن اتصال ولف القياسي
+            // 1. إنشاء كائن اتصال ولف القياسي
             _client = new WolfClient();
 
-            // 3. محاولة تسجيل الدخول والاتصال الفعلي لرفع الحساب أونلاين
+            // 2. محاولة تسجيل الدخول والاتصال الفعلي لرفع الحساب أونلاين
             try
             {
                 Console.WriteLine("📡 جاري إرسال طلب تسجيل الدخول الفعلي إلى ولف...");
                 
-                // استخدام دوال تسجيل الدخول الأصلية المعتمدة في سورس البوت للربط بالسيرفر
+                // استخدام دوال تسجيل الدخول الأصلية المعتمدة في سورس البوت
                 bool loginResult = await _client.Login(botEmail, botPassword);
 
                 if (!loginResult)
@@ -49,7 +51,7 @@ namespace BalloonBot
                 // الدالة المسؤولة عن رفع الحساب أونلاين داخل الغرف والتطبيق
                 await _client.Connect();
                 
-                Console.WriteLine("🎉 البوت متصل الآن بنجاح وأونلاين 100% داخل WOLF!");
+                Console.WriteLine("🎉 إنجاز رائع! البوت متصل الآن بنجاح وأونلاين 100% داخل WOLF!");
             }
             catch (Exception ex)
             {
