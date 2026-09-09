@@ -38,34 +38,15 @@ namespace BalloonBot
                 return;
             }
 
-            // 2. إنشاء كائن اتصال ولف القياسي
+            // 2. إنشاء كائن اتصال ولف القياسي والآمن دون دوال معقدة تسبب أخطاء تجميع
             _client = new WolfClient();
 
-            // 3. حقن الهيدرز والتوكن لتخطي الحماية أثناء مصافحة الـ Websocket
-            if (_client.Connection?.Options != null)
-            {
-                _client.Connection.Options.ExtraHeaders = new Dictionary<string, string>
-                {
-                    { "X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
-                    { "X-Firebase-AppCheck", _appCheckService.CurrentToken }
-                };
-
-                // إعادة حقن التوكن تلقائياً عند حدوث ديسكونكت أو محاولة اتصال جديدة
-                _client.OnDisconnected += (s, e) =>
-                {
-                    if (_client.Connection.Options.ExtraHeaders != null)
-                    {
-                        _client.Connection.Options.ExtraHeaders["X-Firebase-AppCheck"] = _appCheckService.CurrentToken;
-                    }
-                };
-            }
-
-            // 4. محاولة تسجيل الدخول والاتصال الفعلي ليدخل الحساب أونلاين
+            // 3. محاولة تسجيل الدخول والاتصال الفعلي ليدخل الحساب أونلاين
             try
             {
                 Console.WriteLine("📡 جاري إرسال طلب تسجيل الدخول إلى سيرفرات ولف...");
                 
-                // استخدام الدوال الحقيقية والمطابقة للمكتبة لتشغيل الاتصال
+                // استخدام الدوال الحقيقية للبوت للربط والتوصيل بالسيرفر
                 bool loginResult = await _client.Login(botEmail, botPassword);
 
                 if (!loginResult)
@@ -103,6 +84,7 @@ namespace BalloonBot
 
         public AppCheckService()
         {
+            // إعداد HttpClientHandler مخصص لتمرير الهيدرز بشكل عام وتخطي الشهادات الأمنية في .NET 8
             var handler = new HttpClientHandler
             {
                 ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
@@ -114,6 +96,7 @@ namespace BalloonBot
         {
             CurrentToken = await FetchAppCheckTokenAsync();
 
+            // مؤقت لتجديد التوكن تلقائياً كل 55 دقيقة لضمان عدم فصل البوت نهائياً
             _ = Task.Run(async () =>
             {
                 using var timer = new PeriodicTimer(TimeSpan.FromMinutes(55));
