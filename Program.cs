@@ -1,29 +1,31 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using WolfLive.Api; // مكتبة ولف الرسمية
+using WolfLive.Api; 
+using WolfLive.Api.Commands; // تأكد من وجود مكتبة الأوامر إذا كنت تستخدمها
 
 namespace BalloonBot
 {
     class Program
     {
-        private static WolfClient? _client;
+        private static IWolfClient? _client;
         private static AppCheckService? _appCheckService;
 
         static async Task Main(string[] args)
         {
-            Console.WriteLine("=== جاري تشغيل بوت BalloonBot مع حماية AppCheck التلقائية ===");
+            Console.WriteLine("=== جاري تشغيل بوت BalloonBot والاتصال الفعلي بـ WOLF ===");
 
-            // قراءة الإيميل والباسورد من متغيرات البيئة الأمنيّة في جيت هاب
+            // قراءة الإيميل والباسورد من متغيرات بيئة جيت هاب
             string botEmail = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? string.Empty;
             string botPassword = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? string.Empty;
 
             if (string.IsNullOrEmpty(botEmail) || string.IsNullOrEmpty(botPassword))
             {
-                Console.WriteLine("خطأ حرج: لم يتم العثور على بيانات الحساب WOLF_EMAIL أو WOLF_PASSWORD في متغيرات البيئة!");
+                Console.WriteLine("خطأ حرج: لم يتم العثور على بيانات الحساب WOLF_EMAIL أو WOLF_PASSWORD في الـ Secrets!");
                 return;
             }
 
@@ -37,23 +39,39 @@ namespace BalloonBot
                 return;
             }
 
-            // 2. إنشاء كائن اتصال ولف القياسي وتمرير البيانات المباشرة بدون دوال اتصال خاطئة
-            _client = new WolfClient();
+            // 2. إعداد الحماية وتخطي شهادات الحقل للشبكة
+            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator = (message, cert, chain, errors) => true;
 
-            // 3. محاولة ربط التوكن وحقنه برمجياً بالخلفية
+            // 3. بناء اتصال العميل مع حقن الـ ExtraHeaders المناسبة لحماية ولف
+            // قمنا بالاعتماد على الـ Builder القياسي للمكتبة 1.2.3 لتفعيل التشغيل الحقيقي
+            var clientConfiguration = new WolfClient()
+                .WithSetOptions(options =>
+                {
+                    options.ExtraHeaders = new Dictionary<string, string>
+                    {
+                        { "X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
+                        { "X-Firebase-AppCheck", _appCheckService.CurrentToken }
+                    };
+                });
+
+            _client = clientConfiguration;
+
+            // 4. محاولة تسجيل الدخول وربط الحساب ليدخل أونلاين
             try
             {
-                Console.WriteLine("تم تهيئة كائن البوت وجاري بدء الاتصال عبر المكتبة...");
+                Console.WriteLine("جاري إرسال طلب تسجيل الدخول إلى سيرفرات ولف...");
                 
-                // في مكتبة WolfLive.Api يتم تشغيل البوت والربط عبر استدعاء كلاس الأوامر الخارجي أو دلالات التشغيل القياسية للمشروع.
-                // لتجاوز خطأ التجميع (Build Error)، قمنا بإزالة الدوال التجريبية غير المدعومة في الكلاس الرئيسي.
+                // الدالة الرسمية للمكتبة لتسجيل دخول الحساب الفعلي بالتوكن والهيدرز
+                await _client.LoginAsync(botEmail, botPassword);
+                
+                Console.WriteLine("✅ تم دخول BalloonBot أونلاين بنجاح وهو متصل الآن بولف!");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"فشل الاتصال: {ex.Message}");
+                Console.WriteLine($"❌ فشل تسجيل الدخول إلى ولف: {ex.Message}");
             }
 
-            // إبقاء الكونسول مفتوحاً في سيرفر جيت هاب
+            // إبقاء الكونسول نشطاً في جيت هاب لمنع الإغلاق المفاجئ
             await Task.Delay(-1);
         }
     }
@@ -70,10 +88,9 @@ namespace BalloonBot
 
         public AppCheckService()
         {
-            // إعداد HttpClient مع تخطي التحقق من الشهادات بشكل صحيح ومتوافق مع دوت نت 8
             var handler = new HttpClientHandler
             {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
             };
             _httpClient = new HttpClient(handler);
         }
@@ -82,7 +99,6 @@ namespace BalloonBot
         {
             CurrentToken = await FetchAppCheckTokenAsync();
 
-            // مؤقت لتجديد التوكن تلقائياً كل 55 دقيقة لضمان استمرار الاتصال
             _ = Task.Run(async () =>
             {
                 using var timer = new PeriodicTimer(TimeSpan.FromMinutes(55));
@@ -94,7 +110,7 @@ namespace BalloonBot
                         if (!string.IsNullOrEmpty(newToken))
                         {
                             CurrentToken = newToken;
-                            Console.WriteLine($"[{DateTime.Now}] تم تجديد توكن AppCheck تلقائياً بنجاح.");
+                            Console.WriteLine($"[{DateTime.Now}] تم تجديد توكن AppCheck تلقائياً.");
                         }
                     }
                 }
@@ -111,7 +127,6 @@ namespace BalloonBot
             try
             {
                 string url = $"https://googleapis.com{AppId}:exchangeCustomToken?key={ApiKey}";
-                
                 var response = await _httpClient.PostAsJsonAsync(url, new { });
                 
                 if (response.IsSuccessStatusCode)
