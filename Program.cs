@@ -25,8 +25,8 @@ namespace BalloonBot
             // 1. إنشاء كائن اتصال ولف القياسي جداً المتوافق مع إصدار المكتبة 1.2.3
             _client = new WolfClient();
 
-            // 2. ربط معالج الأحداث لطباعة نجاح الدخول الفعلي فور حدوثه
-            _client.OnConnected += (sender, e) =>
+            // 2. ربط معالج الأحداث الصحيح (يأخذ مَعاملاً واحداً فقط لتفادي خطأ CS1593)
+            _client.OnConnected += (client) =>
             {
                 Console.WriteLine("🎉 إنجاز رائع! البوت متصل الآن بنجاح وأونلاين 100% داخل WOLF!");
             };
@@ -36,8 +36,17 @@ namespace BalloonBot
             {
                 Console.WriteLine("📡 جاري إرسال طلب تسجيل الدخول الفعلي إلى ولف...");
                 
-                // استخدام دالة الدخول والربط الحقيقية المباشرة للمكتبة 1.2.3 
-                await _client.LoginAsync(botEmail, botPassword);
+                // استخدام دالة الدخول القياسية والاتصال المتوافقة مع كود لعبة مزاج الأصلي
+                bool loginResult = await _client.Login(botEmail, botPassword);
+
+                if (!loginResult)
+                {
+                    Console.WriteLine("❌ فشل تسجيل الدخول إلى ولف (تأكد من صحة الحساب).");
+                    return;
+                }
+
+                Console.WriteLine("✅ تم تسجيل الدخول بنجاح! جاري فتح اتصال الـ Websocket لرفع الحساب...");
+                await _client.Connect();
             }
             catch (Exception ex)
             {
