@@ -1,10 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using WolfLive.Api; // مكتبة ولف القياسية
+using WolfLive.Api; // مكتبة ولف المعتمدة للمشروع
 
 namespace BalloonBot
 {
@@ -15,46 +16,78 @@ namespace BalloonBot
 
         static async Task Main(string[] args)
         {
-            Console.WriteLine("=== جاري تشغيل بوت BalloonBot والاتصال الفعلي بـ WOLF ===");
+            Console.WriteLine("=== 🚀 تشغيل بوت BalloonBot والاتصال الفعلي بـ WOLF ===");
 
-            // قراءة الإيميل والباسورد من متغيرات بيئة جيت هاب الأمنية (Secrets)
+            // قراءة الإيميل والباسورد من متغيرات بيئة جيت هاب (Secrets) لضمان الأمان
             string botEmail = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? string.Empty;
             string botPassword = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? string.Empty;
 
             if (string.IsNullOrEmpty(botEmail) || string.IsNullOrEmpty(botPassword))
             {
-                Console.WriteLine("خطأ حرج: لم يتم العثور على بيانات الحساب WOLF_EMAIL أو WOLF_PASSWORD في الـ Secrets!");
+                Console.WriteLine("❌ خطأ حرج: لم يتم العثور على بيانات الحساب WOLF_EMAIL أو WOLF_PASSWORD في الـ Secrets!");
                 return;
             }
 
-            // 1. تشغيل خدمة جلب وتحديث التوكن التلقائي
+            // 1. تشغيل خدمة جلب وتحديث التوكن التلقائي في الخلفية لحماية AppCheck
             _appCheckService = new AppCheckService();
             await _appCheckService.StartAsync();
 
             if (!_appCheckService.IsInitialized)
             {
-                Console.WriteLine("خطأ حرج: فشل البوت في توليد توكن Firebase AppCheck.");
+                Console.WriteLine("❌ خطأ حرج: فشل البوت في توليد توكن Firebase AppCheck. تحقق من الاتصال.");
                 return;
             }
 
-            // 2. إنشاء كائن اتصال ولف القياسي جداً دون استخدام أي دوال تسبب أخطاء بناء
+            // 2. إنشاء كائن اتصال ولف القياسي
             _client = new WolfClient();
 
-            // 3. بدء تشغيل البوت ودخوله أونلاين
+            // 3. حقن الهيدرز والتوكن لتخطي الحماية أثناء مصافحة الـ Websocket
+            if (_client.Connection?.Options != null)
+            {
+                _client.Connection.Options.ExtraHeaders = new Dictionary<string, string>
+                {
+                    { "X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
+                    { "X-Firebase-AppCheck", _appCheckService.CurrentToken }
+                };
+
+                // إعادة حقن التوكن تلقائياً عند حدوث ديسكونكت أو محاولة اتصال جديدة
+                _client.OnDisconnected += (s, e) =>
+                {
+                    if (_client.Connection.Options.ExtraHeaders != null)
+                    {
+                        _client.Connection.Options.ExtraHeaders["X-Firebase-AppCheck"] = _appCheckService.CurrentToken;
+                    }
+                };
+            }
+
+            // 4. محاولة تسجيل الدخول والاتصال الفعلي ليدخل الحساب أونلاين
             try
             {
-                Console.WriteLine("جاري بدء تشغيل البوت والربط عبر السيرفرات...");
+                Console.WriteLine("📡 جاري إرسال طلب تسجيل الدخول إلى سيرفرات ولف...");
                 
-                // هنا نترك البوت يقوم بعملية الاتصال والتشغيل التلقائية الخاصة بمشروعك
-                // الخدمة بالأسفل متكفلة بحقن التوكن عبر حزم الاتصالات الصادرة لتخطي الحماية
+                // استخدام الدوال الحقيقية والمطابقة للمكتبة لتشغيل الاتصال
+                bool loginResult = await _client.Login(botEmail, botPassword);
+
+                if (!loginResult)
+                {
+                    Console.WriteLine("❌ فشل تسجيل الدخول إلى ولف (تأكد من صحة الحساب).");
+                    return;
+                }
+
+                Console.WriteLine("✅ تم تسجيل الدخول بنجاح. جاري فتح اتصال الـ Websocket...");
+                
+                // الدالة المسؤولة عن رفع الحساب أونلاين في الغرف
+                await _client.Connect();
+                
+                Console.WriteLine("🎉 البوت الآن أونلاين بنجاح ومتصل بـ WOLF!");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"فشل الاتصال: {ex.Message}");
+                Console.WriteLine($"❌ فشل الاتصال: {ex.Message}");
             }
 
-            // إبقاء الكونسول نشطاً في سيرفر جيت هاب
-            await Task.Delay(-1);
+            // إبقاء الكونسول نشطاً في سيرفر جيت هاب لمنع إغلاق البوت تلقائياً
+            await Task.Delay(Timeout.Infinite);
         }
     }
 
@@ -70,7 +103,6 @@ namespace BalloonBot
 
         public AppCheckService()
         {
-            // إعداد معالج اتصال متوافق وآمن مع دوت نت 8 لتجاوز قيود القراءة فقط
             var handler = new HttpClientHandler
             {
                 ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
@@ -82,7 +114,6 @@ namespace BalloonBot
         {
             CurrentToken = await FetchAppCheckTokenAsync();
 
-            // مؤقت لتجديد التوكن تلقائياً كل 55 دقيقة لضمان استمرار الاتصال
             _ = Task.Run(async () =>
             {
                 using var timer = new PeriodicTimer(TimeSpan.FromMinutes(55));
@@ -94,7 +125,7 @@ namespace BalloonBot
                         if (!string.IsNullOrEmpty(newToken))
                         {
                             CurrentToken = newToken;
-                            Console.WriteLine($"[{DateTime.Now}] تم تجديد توكن AppCheck تلقائياً.");
+                            Console.WriteLine($"[{DateTime.Now}] تم تجديد توكن AppCheck تلقائياً بنجاح.");
                         }
                     }
                 }
@@ -111,7 +142,6 @@ namespace BalloonBot
             try
             {
                 string url = $"https://googleapis.com{AppId}:exchangeCustomToken?key={ApiKey}";
-                
                 var response = await _httpClient.PostAsJsonAsync(url, new { });
                 
                 if (response.IsSuccessStatusCode)
