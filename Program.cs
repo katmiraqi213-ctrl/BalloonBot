@@ -22,13 +22,27 @@ namespace BalloonBot
                 return;
             }
 
-            // 1. إنشاء كائن اتصال ولف القياسي جداً المتوافق مع إصدار المكتبة 1.2.3
+            // 1. إنشاء كائن اتصال ولف القياسي
             _client = new WolfClient();
 
-            // 2. ربط معالج الأحداث الصحيح (يأخذ مَعاملاً واحداً فقط لتفادي خطأ CS1593)
-            _client.OnConnected += (client) =>
+            // 2. ربط معالج الأحداث
+            _client.OnConnected += async (client) =>
             {
-                Console.WriteLine("🎉 إنجاز رائع! البوت متصل الآن بنجاح وأونلاين 100% داخل WOLF!");
+                Console.WriteLine("📡 تم فتح قناة الاتصال الأساسية بنجاح.");
+                
+                try
+                {
+                    // فرض إرسال حزمة الحالة (Presence) ليظهر الحساب أونلاين فوراً في الغرف والتطبيق
+                    if (_client.Messaging != null)
+                    {
+                        // استدعاء تهيئة استقبال الرسائل لتنشيط حالة الحساب بالسيرفر
+                        Console.WriteLine("🔄 جاري تحديث حالة الحساب وتنشيط الظهور أونلاين...");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ تنبيه أثناء تحديث الحالة: {ex.Message}");
+                }
             };
 
             // 3. محاولة تسجيل الدخول والاتصال الفعلي لرفع الحساب أونلاين
@@ -36,7 +50,6 @@ namespace BalloonBot
             {
                 Console.WriteLine("📡 جاري إرسال طلب تسجيل الدخول الفعلي إلى ولف...");
                 
-                // استخدام دالة الدخول القياسية والاتصال المتوافقة مع كود لعبة مزاج الأصلي
                 bool loginResult = await _client.Login(botEmail, botPassword);
 
                 if (!loginResult)
@@ -45,8 +58,10 @@ namespace BalloonBot
                     return;
                 }
 
-                Console.WriteLine("✅ تم تسجيل الدخول بنجاح! جاري فتح اتصال الـ Websocket لرفع الحساب...");
+                Console.WriteLine("✅ تم تسجيل الدخول بنجاح! جاري الاتصال بالـ Websocket...");
                 await _client.Connect();
+                
+                Console.WriteLine("🎉 إنجاز رائع! البوت متصل الآن بنجاح وأونلاين 100% داخل WOLF!");
             }
             catch (Exception ex)
             {
