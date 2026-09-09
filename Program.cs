@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -40,22 +41,21 @@ namespace BalloonBot
             // 2. إنشاء كائن اتصال ولف القياسي
             _client = new WolfClient();
 
-            // 3. الخدعة البرمجية النهائية: حقن التوكن والـ API Key مباشرة في متغيرات الرابط (Query Parameters)
-            // هذه الطريقة تجبر سيرفر ولف والـ WebSocket على قراءة التوكن وتخطي الحماية فوراً دون الحاجة لـ ExtraHeaders
+            // 3. حقن التوكن والـ API Key مباشرة في متغيرات الرابط (Query Parameters) باستخدام قاموس Dictionary صحيح
             if (_client.Connection?.Options != null)
             {
-                _client.Connection.Options.Query = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>
+                _client.Connection.Options.Query = new Dictionary<string, string>
                 {
-                    new ("token", _appCheckService.CurrentToken),
-                    new ("apiKey", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc"),
-                    new ("X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc"),
-                    new ("X-Firebase-AppCheck", _appCheckService.CurrentToken)
+                    { "token", _appCheckService.CurrentToken },
+                    { "apiKey", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
+                    { "X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
+                    { "X-Firebase-AppCheck", _appCheckService.CurrentToken }
                 };
             }
 
             _client.OnConnected += (client) =>
             {
-                Console.WriteLine("🎉 [نجاح قطعي] البوت تجاوز الحماية بالكامل واستقر اتصاله بالسيرفر دون طرد!");
+                Console.WriteLine("🎉 [نجاح قطعي] البوت تجاوز الحماية واستقر اتصاله بالسيرفر دون طرد!");
             };
 
             // 4. محاولة تسجيل الدخول والاتصال الفعلي لرفع الحساب أونلاين
