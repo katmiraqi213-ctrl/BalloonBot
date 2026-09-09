@@ -44,8 +44,8 @@ namespace BalloonBot
                 };
             }
 
-            // 4. الخدعة البرمجية النهائية: فرض دخول الروم فور نجاح التوصيل ليتحول إلى أونلاين أخضر
-            _client.OnConnected += async (client) =>
+            // 4. فرض دخول الروم فور نجاح التوصيل ليتحول إلى أونلاين أخضر عبر دالة Send الصحيحة
+            _client.OnConnected += (client) =>
             {
                 Console.WriteLine("🎉 [نجاح قطعي] تم توثيق الهوية وسيرفرات ولف قبلت الاتصال!");
                 
@@ -53,12 +53,11 @@ namespace BalloonBot
                 {
                     Console.WriteLine("🔄 جاري إرسال حزمة الوجود الرقمي ودخول الروم لتنشيط الـ Online الأخضر...");
                     
-                    // نقوم باستدعاء باقة تحديث الحالة والاشتراك الفعلي بالروم عبر السوكيت المفتوح
                     // استبدل رقم (1234567) بالـ ID الحقيقي لغرفتك أو الروم الخاص بك في ولف
                     int TargetGroupId = 1234567; 
                     
-                    // إرسال طلب التواجد الفعلي في السيرفر
-                    await _client.Packeting.SendAsync("group subscribe", new { id = TargetGroupId });
+                    // استخدام الدالة القياسية المعتمدة بالمكتبة لإرسال الحزمة فوراً
+                    _client.Packeting.Send("group subscribe", new { id = TargetGroupId });
                     Console.WriteLine("✅ تم إرسال حزمة الدخول والنشاط بنجاح! الحساب الآن أونلاين.");
                 }
                 catch (Exception ex)
