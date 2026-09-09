@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
@@ -10,14 +11,15 @@ namespace BalloonBot
 {
     class Program
     {
-        private static WolfClient? _client;
+        // استخدام الواجهة المباشرة IWolfClient لتمكين دوال تسجيل الدخول والاتصال
+        private static IWolfClient? _client;
         private static AppCheckService? _appCheckService;
 
         static async Task Main(string[] args)
         {
-            Console.WriteLine("=== جاري تشغيل بوت BalloonBot والاتصال التلقائي بـ WOLF ===");
+            Console.WriteLine("=== جاري تشغيل بوت BalloonBot والاتصال الفعلي بـ WOLF ===");
 
-            // قراءة الإيميل والباسورد من متغيرات بيئة جيت هاب الأمنية (Secrets)
+            // قراءة البيانات بأمان من Secrets جيت هاب
             string botEmail = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? string.Empty;
             string botPassword = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? string.Empty;
 
@@ -27,7 +29,7 @@ namespace BalloonBot
                 return;
             }
 
-            // 1. تشغيل خدمة جلب وتحديث التوكن التلقائي
+            // 1. تشغيل خدمة جلب وتحديث التوكن التلقائي في الخلفية
             _appCheckService = new AppCheckService();
             await _appCheckService.StartAsync();
 
@@ -37,23 +39,42 @@ namespace BalloonBot
                 return;
             }
 
-            // 2. إنشاء كائن اتصال ولف القياسي والآمن المتوافق مع إصدار المكتبة 1.2.3
-            _client = new WolfClient();
+            // 2. إنشاء كائن البوت مع حقن الهيدرز الأساسية لتخطي حماية ولف عبر الـ Builder
+            _client = new WolfClient(options =>
+            {
+                options.ExtraHeaders = new Dictionary<string, string>
+                {
+                    { "X-Firebase-API-Key", "AIzaSyAs8_UvS_W4Xl6fM7_XpQwYRtUv1nAmZbc" },
+                    { "X-Firebase-AppCheck", _appCheckService.CurrentToken }
+                };
+            });
 
-            // 3. تفعيل الاتصال ودخول البوت أونلاين
+            // 3. تأمين اتصال البوت عند حدوث أي انقطاع مفاجئ بالشبكة ليقوم بتجديد التوكن
+            _client.OnDisconnected += (s, e) =>
+            {
+                Console.WriteLine("انقطع اتصال البوت! جاري تحديث هيدرز حماية AppCheck...");
+                if (_client.Options.ExtraHeaders != null)
+                {
+                    _client.Options.ExtraHeaders["X-Firebase-AppCheck"] = _appCheckService.CurrentToken;
+                }
+            };
+
+            // 4. الدخول الفعلي والاتصال ليدخل الحساب أونلاين
             try
             {
-                Console.WriteLine("جاري بدء تشغيل العميل وإدخال البوت أونلاين...");
+                Console.WriteLine("جاري إرسال طلب تسجيل الدخول الفعلي للسيرفرات...");
                 
-                // في مكتبة WolfLive.Api 1.2.3، يتم الاتصال المباشر بالحساب عبر تفعيل الخصائص المضمنة داخل الكائن الرئيسي للمكتبة.
-                // تم تبسيط الكود لضمان تمرير التوكن عبر الشبكة وتجنب أي خطأ تجميع (Build Error).
+                // استدعاء الدالة القياسية المعتمدة للربط والاتصال بالـ Websocket
+                await _client.LoginAsync(botEmail, botPassword);
+                
+                Console.WriteLine("✅ تم دخول BalloonBot أونلاين بنجاح وهو الآن متصل ويتفاعل!");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"فشل الاتصال: {ex.Message}");
+                Console.WriteLine($"❌ فشل الاتصال والربط: {ex.Message}");
             }
 
-            // إبقاء الكونسول نشطاً في سيرفر جيت هاب لمنع إغلاق البوت
+            // إبقاء كونسول جيت هاب يعمل لمراقبة العمليات
             await Task.Delay(-1);
         }
     }
@@ -70,7 +91,6 @@ namespace BalloonBot
 
         public AppCheckService()
         {
-            // إعداد الـ HttpClientHandler بطريقة متوافقة وسليمة في دوت نت 8 لتفادي الأخطاء البرمجية للقراءة فقط
             var handler = new HttpClientHandler
             {
                 ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
@@ -82,7 +102,6 @@ namespace BalloonBot
         {
             CurrentToken = await FetchAppCheckTokenAsync();
 
-            // مؤقت لتجديد التوكن تلقائياً كل 55 دقيقة لضمان استمرار الاتصال
             _ = Task.Run(async () =>
             {
                 using var timer = new PeriodicTimer(TimeSpan.FromMinutes(55));
@@ -111,7 +130,6 @@ namespace BalloonBot
             try
             {
                 string url = $"https://googleapis.com{AppId}:exchangeCustomToken?key={ApiKey}";
-                
                 var response = await _httpClient.PostAsJsonAsync(url, new { });
                 
                 if (response.IsSuccessStatusCode)
