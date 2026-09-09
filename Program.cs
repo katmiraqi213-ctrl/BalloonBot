@@ -44,8 +44,8 @@ namespace BalloonBot
                 };
             }
 
-            // 4. فرض دخول الروم فور نجاح التوصيل ليتحول إلى أونلاين أخضر عبر دالة Send الصحيحة
-            _client.OnConnected += (client) =>
+            // 4. فرض دخول الروم فور نجاح التوصيل ليتحول إلى أونلاين أخضر عبر دالة Emit أو الـ WebSockets
+            _client.OnConnected += async (client) =>
             {
                 Console.WriteLine("🎉 [نجاح قطعي] تم توثيق الهوية وسيرفرات ولف قبلت الاتصال!");
                 
@@ -56,9 +56,12 @@ namespace BalloonBot
                     // استبدل رقم (1234567) بالـ ID الحقيقي لغرفتك أو الروم الخاص بك في ولف
                     int TargetGroupId = 1234567; 
                     
-                    // استخدام الدالة القياسية المعتمدة بالمكتبة لإرسال الحزمة فوراً
-                    _client.Packeting.Send("group subscribe", new { id = TargetGroupId });
-                    Console.WriteLine("✅ تم إرسال حزمة الدخول والنشاط بنجاح! الحساب الآن أونلاين.");
+                    // استخدام المحاكي البرمجي الأضمن في حزم ولف لإرسال إخطار الاشتراك والوجود بالروم
+                    if (_client.Connection != null)
+                    {
+                        await _client.Connection.EmitAsync("group subscribe", new { id = TargetGroupId });
+                        Console.WriteLine("✅ تم إرسال حزمة الدخول والنشاط بنجاح! الحساب الآن أونلاين.");
+                    }
                 }
                 catch (Exception ex)
                 {
