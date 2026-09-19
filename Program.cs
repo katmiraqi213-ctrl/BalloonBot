@@ -10,33 +10,69 @@ namespace BalloonBot
 
         public static async Task Main(string[] args)
         {
+            // 1. جلب بيانات الحساب بأمان من الـ Secrets لمنع قراءتها على جيت هاب
             string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
             string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
             if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
             {
-                Console.WriteLine("خطأ: لم يتم العثور على الأسرار في متغيرات البيئة!");
+                Console.WriteLine("❌ خطأ: لم يتم العثور على الأسرار (Secrets) في متغيرات البيئة!");
                 return;
             }
 
-            // إنشاء الاتصال الأساسي بالسيرفر
+            // 2. إنشاء عميل الاتصال الفعلي بـ WOLF
             _client = new WolfClient();
 
-            Console.WriteLine("جاري محاولة الاتصال بسيرفر ولف وتوليد الـ API...");
+            // 3. ربط حدث استقبال الرسائل النصية للرد التلقائي
+            _client.OnTextMessage += OnTextMessageReceived;
 
-            // تسجيل الدخول المباشر الموثق في نواة المكتبة
-            var loginResult = await _client.Login(email, password);
+            Console.WriteLine("🔄 جاري محاولة الاتصال بسيرفر ولف وتوليد الـ API...");
 
-            if (loginResult)
+            try
             {
-                Console.WriteLine("🎉 تم تسجيل الدخول بنجاح! البوت الآن أونلاين.");
-                
-                // للحفاظ على عمل البوت مفتوحاً داخل سرفر الاستضافة
-                await Task.Delay(-1); 
+                // 4. تسجيل الدخول والتحقق من الحساب
+                var loginResult = await _client.Login(email, password);
+
+                if (loginResult)
+                {
+                    Console.WriteLine("🔑 تم التحقق من الحساب بنجاح! جاري فتح الجلسة الحية (Socket)...");
+
+                    // 5. [التعديل الأهم] إجبار البوت على الاتصال بالبوابة والبقاء أونلاين في الغرف
+                    await _client.ConnectAsync(); 
+
+                    Console.WriteLine("🎉 البوت متصل الآن بالكامل وأونلاين داخل تطبيق WOLF!");
+                    
+                    // الحفاظ على تشغيل السيرفر مفتوحاً ومستمراً بدون إغلاق
+                    await Task.Delay(-1); 
+                }
+                else
+                {
+                    Console.WriteLine("❌ فشل الاتصال بالـ API: يرجى التحقق من صحة الإيميل أو الباسورد في الـ Secrets.");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Console.WriteLine("❌ فشل الاتصال بالـ API: يرجى التحقق من صحة البيانات في الـ Secrets");
+                Console.WriteLine($"⚠️ حدث خطأ غير متوقع أثناء الاتصال: {ex.Message}");
+            }
+        }
+
+        // 6. دالة معالجة الرسائل والرد التلقائي في الغرف والخاص
+        private static async Task OnTextMessageReceived(WolfClient client, Message message)
+        {
+            try
+            {
+                string body = message.Body ?? "";
+
+                // إذا كتب أي مستخدم في الغرفة الكلمات المفتاحية
+                if (body.Contains("البالون") || body.Contains("بوت"))
+                {
+                    // الرد التلقائي السريع
+                    await client.Reply(message, "أهلاً بك! أنا بوت البالون المطور، كيف يمكنني مساعدتك اليوم؟ 🎈");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ خطأ أثناء معالجة الرسالة: {ex.Message}");
             }
         }
     }
