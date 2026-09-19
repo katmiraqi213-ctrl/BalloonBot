@@ -10,35 +10,41 @@ namespace BalloonBot
 
         public static async Task Main(string[] args)
         {
-            // 1. جلب التوكن الصافي لحساب البوت فقط (لا نحتاج الـ AppCheck هنا لأننا تخطينا دالة الـ Login)
-            string token = Environment.GetEnvironmentVariable("WOLF_TOKEN") ?? "";
+            // 1. جلب البيانات القياسية من الـ Secrets المخزنة في جيت هاب
+            string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
+            string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
-            if (string.IsNullOrEmpty(token))
+            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
             {
-                Console.WriteLine("❌ خطأ: لم يتم العثور على الـ WOLF_TOKEN في متغيرات البيئة!");
+                Console.WriteLine("❌ خطأ: لم يتم العثور على الأسرار (Secrets) في متغيرات البيئة!");
                 return;
             }
 
-            // 2. إنشاء عميل الاتصال القياسي المتوافق مع مكتبتك
+            // 2. إنشاء عميل الاتصال القياسي المتوافق 100% مع إصدار مكتبتك
             _client = new WolfClient();
 
-            // 3. الحل القطعي: حقن التوكن مباشرة داخل إعدادات الجلسة (Session) لتخطي جدار الحماية
-            // بهذه الطريقة نُعلم السيرفر أن الحساب تم التحقق منه مسبقاً وتوليد الـ API له بنجاح
-            _client.Token = token;
-
-            Console.WriteLine("🔄 جاري تخطي فحص جدار الحماية والظهور بحالة متصل عبر حقن التوكن...");
+            Console.WriteLine("🔄 جاري محاولة الاتصال بالسيرفر وتوليد الـ API المباشر...");
 
             try
             {
-                // 4. البوت الآن جاهز ويعتبر متصلاً تلقائياً بالتوكن المحقون، ونقوم فقط بتثبيت الجلسة
-                Console.WriteLine("🎉 إنجاز عظيم! البوت متصل الآن بالكامل وأونلاين داخل تطبيق WOLF ومستقر!");
-                
-                // الحفاظ على تشغيل السيرفر مستمراً في الخلفية بدون إغلاق
-                await Task.Delay(-1);
+                // 3. استدعاء الدالة القياسية الوحيدة المعرفة بالمكتبة مع مَثيليها المطلوبة
+                var loginResult = await _client.Login(email, password);
+
+                if (loginResult)
+                {
+                    Console.WriteLine("🎉 إنجاز عظيم! البوت متصل الآن بالكامل وأونلاين داخل تطبيق WOLF ومستقر!");
+                    
+                    // الحفاظ على تشغيل السيرفر مستمراً في الخلفية بدون إغلاق
+                    await Task.Delay(-1);
+                }
+                else
+                {
+                    Console.WriteLine("❌ فشل الاتصال: يرجى التحقق من صحة الإيميل أو الباسورد في الـ Secrets.");
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"⚠️ حدث خطأ غير متوقع: {ex.Message}");
+                Console.WriteLine($"⚠️ حدث خطأ غير متوقع أثناء الاتصال: {ex.Message}");
             }
         }
     }
