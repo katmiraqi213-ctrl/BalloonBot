@@ -4,6 +4,8 @@ using WolfLive.Api;
 
 class Program
 {
+    private static WolfClient? _client;
+
     static async Task Main(string[] args)
     {
         string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
@@ -15,20 +17,19 @@ class Program
             return;
         }
 
-        var client = new WolfClient();
+        // 1. تهيئة العميل
+        _client = new WolfClient();
 
-        // 1. تفعيل ميزة الاستماع للرسائل القادمة من الغرف والخاص
-        client.OnMessage += OnMessageReceived;
+        // 2. ربط الـ Event الخاص باستقبال حزم البيانات (Packet) لتفادي أخطاء الأنواع غير المعروفة
+        _client.OnPacket += OnPacketReceived;
 
         Console.WriteLine("جاري محاولة الاتصال بسيرفر ولف وتوليد الـ API...");
 
-        var loginResult = await client.Login(email, password);
+        var loginResult = await _client.Login(email, password);
 
         if (loginResult)
         {
-            Console.WriteLine("🎉 تم تسجيل الدخول بنجاح! البوت الآن يستمع للرسائل في الغرف.");
-            
-            // يحافظ على عمل البوت مستمراً بدون توقف داخل الاستضافة
+            Console.WriteLine("🎉 تم تسجيل الدخول بنجاح! البوت الآن يستمع للرسائل والأوامر.");
             await Task.Delay(-1); 
         }
         else
@@ -37,17 +38,33 @@ class Program
         }
     }
 
-    // 2. الدالة المسؤولة عن قراءة الرسائل والرد عليها تلقائياً
-    private static async Task OnMessageReceived(WolfClient client, IMessage message)
+    // 3. معالجة الحزم القادمة للتعرف على الرسائل والرد عليها
+    private static async Task OnPacketReceived(WolfClient client, IPacket packet)
     {
-        // للتأكد من أن الرسالة نصية وليست صورة أو إيموجي متحرك
-        if (message.IsText)
+        // التحقق مما إذا كانت الحزمة القادمة عبارة عن رسالة دردشة نصية
+        if (packet.Command == "message send" && packet.Payload != null)
         {
-            // إذا كتب أي شخص في الغرفة كلمة "البالون" أو "بوت"
-            if (message.Body.Contains("البالون") || message.Body.Contains("بوت"))
+            try
             {
-                // يقوم البوت بالرد التلقائي داخل نفس الغرفة أو الخاص
-                await client.Reply(message, "أهلاً بك! أنا بوت البالون المطور، كيف يمكنني مساعدتك اليوم؟ 🎈");
+                // سحب نص الرسالة المكتوبة
+                var body = packet.Payload["body"]?.ToString() ?? "";
+                
+                // إذا احتوى النص على الكلمات المفتاحية للبوت
+                if (body.Contains("البالون") || body.Contains("بوت"))
+                {
+                    // تجهيز حزمة الرد لإرسالها لنفس الغرفة أو الخاص
+                    var replyPacket = new Packet("message send");
+                    replyPacket.Payload["recipient"] = packet.Payload["recipient"];
+                    replyPacket.Payload["isGroup"] = packet.Payload["isGroup"];
+                    replyPacket.Payload["mimeType"] = "text/plain";
+                    replyPacket.Payload["body"] = "أهلاً بك! أنا بوت البالون المطور، كيف يمكنني مساعدتك اليوم؟ 🎈";
+
+                    await client.Send(replyPacket);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"خطأ أثناء معالجة الرسالة: {ex.Message}");
             }
         }
     }
