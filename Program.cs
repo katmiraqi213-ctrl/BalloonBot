@@ -10,7 +10,7 @@ namespace BalloonBot
 
         public static async Task Main(string[] args)
         {
-            // 1. استدعاء التوكنات الآمنة من الـ Secrets لمنع الحظر
+            // 1. استدعاء التوكنات الآمنة المستخرجة من الـ Secrets لمنع الحظر
             string token = Environment.GetEnvironmentVariable("WOLF_TOKEN") ?? "";
             string appCheck = Environment.GetEnvironmentVariable("APP_CHECK_TOKEN") ?? "";
 
@@ -25,19 +25,16 @@ namespace BalloonBot
             _client = new WolfClient(options);
             _client.AddHeader("X-AppCheck-Token", appCheck);
 
-            // 3. ربط حدث استقبال الرسائل للرد التلقائي داخل الغرف والخاص
-            _client.OnTextMessage += OnTextMessageReceived;
-
             Console.WriteLine("🔄 جاري محاولة تخطي جدار الحماية والاتصال المباشر بالسيرفر...");
 
             try
             {
-                // 4. تسجيل الدخول الفوري والمباشر عبر التوكن المستخرج
+                // 3. تسجيل الدخول الفوري والمباشر عبر التوكن المستخرج
                 var loginResult = await _client.Login(token);
 
                 if (loginResult)
                 {
-                    Console.WriteLine("🎉 البوت متصل الآن بالكامل وأونلاين داخل تطبيق WOLF ومستعد لاستقبال الأوامر!");
+                    Console.WriteLine("🎉 البوت متصل الآن بالكامل وأونلاين داخل تطبيق WOLF ومستقر!");
                     
                     // الحفاظ على تشغيل السيرفر مستمراً في الخلفية بدون إغلاق
                     await Task.Delay(-1); 
@@ -50,26 +47,6 @@ namespace BalloonBot
             catch (Exception ex)
             {
                 Console.WriteLine($"⚠️ حدث خطأ غير متوقع أثناء الاتصال: {ex.Message}");
-            }
-        }
-
-        // 5. دالة الاستماع والقراءة والرد التلقائي في الغرف
-        private static async Task OnTextMessageReceived(WolfClient client, Message message)
-        {
-            try
-            {
-                string body = message.Body ?? "";
-
-                // إذا كتب أي شخص في الغرفة كلمة "البالون" أو "بوت"
-                if (body.Contains("البالون") || body.Contains("بوت"))
-                {
-                    // الرد التلقائي المباشر في الغرفة
-                    await client.Reply(message, "أهلاً بك! أنا بوت البالون المطور، كيف يمكنني مساعدتك اليوم؟ 🎈");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ خطأ أثناء معالجة الرسالة: {ex.Message}");
             }
         }
     }
