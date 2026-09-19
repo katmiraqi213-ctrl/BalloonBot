@@ -6,35 +6,49 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        // 1. استدعاء البيانات بأمان من الـ Secrets مع إضافة تفادي الـ Null بقيمة افتراضية فارغة
         string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
         string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
-        // تحقق سريع للتأكد من أن السيرفر استطاع قراءة الأسرار من النظام
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
         {
-            Console.WriteLine("خطأ: لم يتم العثور على الأسرار (Secrets) في متغيرات البيئة!");
+            Console.WriteLine("خطأ: لم يتم العثور على الأسرار في متغيرات البيئة!");
             return;
         }
 
-        // 2. إنشاء عميل الاتصال بـ WOLF
         var client = new WolfClient();
+
+        // 1. تفعيل ميزة الاستماع للرسائل القادمة من الغرف والخاص
+        client.OnMessage += OnMessageReceived;
 
         Console.WriteLine("جاري محاولة الاتصال بسيرفر ولف وتوليد الـ API...");
 
-        // 3. تعديل اسم الدالة إلى الاسم الصحيح والموجود داخل مكتبة WolfLive.Api
         var loginResult = await client.Login(email, password);
 
         if (loginResult)
         {
-            Console.WriteLine("🎉 تم تسجيل الدخول بنجاح عبر الأسرار الآمنة! البوت الآن أونلاين.");
+            Console.WriteLine("🎉 تم تسجيل الدخول بنجاح! البوت الآن يستمع للرسائل في الغرف.");
             
-            // يحافظ على عمل البوت مفتوحاً داخل سرفر الاستضافة
+            // يحافظ على عمل البوت مستمراً بدون توقف داخل الاستضافة
             await Task.Delay(-1); 
         }
         else
         {
-            Console.WriteLine("❌ فشل الاتصال بالـ API: يرجى التحقق من صحة الإيميل أو الباسورد في الـ Secrets");
+            Console.WriteLine("❌ فشل الاتصال بالـ API: يرجى التحقق من الأسرار.");
+        }
+    }
+
+    // 2. الدالة المسؤولة عن قراءة الرسائل والرد عليها تلقائياً
+    private static async Task OnMessageReceived(WolfClient client, IMessage message)
+    {
+        // للتأكد من أن الرسالة نصية وليست صورة أو إيموجي متحرك
+        if (message.IsText)
+        {
+            // إذا كتب أي شخص في الغرفة كلمة "البالون" أو "بوت"
+            if (message.Body.Contains("البالون") || message.Body.Contains("بوت"))
+            {
+                // يقوم البوت بالرد التلقائي داخل نفس الغرفة أو الخاص
+                await client.Reply(message, "أهلاً بك! أنا بوت البالون المطور، كيف يمكنني مساعدتك اليوم؟ 🎈");
+            }
         }
     }
 }
