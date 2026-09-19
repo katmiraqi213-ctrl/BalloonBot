@@ -10,7 +10,7 @@ namespace BalloonBot
 
         public static async Task Main(string[] args)
         {
-            // 1. جلب بيانات الحساب بأمان من الـ Secrets المخزنة في الـ Environment
+            // 1. جلب بيانات الحساب بأمان من الـ Secrets لمنع قراءتها على جيت هاب
             string email = Environment.GetEnvironmentVariable("WOLF_EMAIL") ?? "";
             string password = Environment.GetEnvironmentVariable("WOLF_PASSWORD") ?? "";
 
@@ -27,19 +27,14 @@ namespace BalloonBot
 
             try
             {
-                // 3. تسجيل الدخول والتحقق من صحة الحساب
+                // 3. تسجيل الدخول والتحقق من صحة الحساب (يفتح الاتصال تلقائيًا داخليًا)
                 var loginResult = await _client.Login(email, password);
 
                 if (loginResult)
                 {
-                    Console.WriteLine("🔑 تم التحقق من الحساب بنجاح! جاري فتح الجلسة الحية (Socket)...");
-
-                    // 4. فتح قناة الاتصال المستمر للبقاء أونلاين بشكل دائم داخل التطبيق
-                    await _client.ConnectAsync(); 
-
-                    Console.WriteLine("🎉 البوت متصل الآن بالكامل وأونلاين داخل تطبيق WOLF!");
+                    Console.WriteLine("🎉 تم تسجيل الدخول بنجاح! البوت الآن متصل بالكامل وأونلاين داخل تطبيق WOLF.");
                     
-                    // الحفاظ على عمل السيرفر مفتوحاً ومستمراً بدون إغلاق
+                    // 4. الحفاظ على عمل السيرفر مفتوحاً ومستمراً لمنع البرنامج من الإغلاق وفصل البوت
                     await Task.Delay(-1); 
                 }
                 else
