@@ -31,3 +31,37 @@ namespace BalloonBot
                     _client = new WolfClient(token: token);
                     Console.WriteLine("Client created with token.");
                     await Task.Delay(-1);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Token login failed: " + ex.Message);
+                }
+            }
+
+            if (hasLogin)
+            {
+                try
+                {
+                    Console.WriteLine("Trying email/password login...");
+                    _client = new WolfClient();
+                    bool ok = await _client.Login(email, password);
+
+                    if (ok)
+                    {
+                        Console.WriteLine("Logged in. Bot is online.");
+                        await Task.Delay(-1);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Login failed: check email and password.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Unexpected error: " + ex.Message);
+                }
+            }
+        }
+    }
+}
