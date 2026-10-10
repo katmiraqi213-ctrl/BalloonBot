@@ -29,7 +29,8 @@ namespace BalloonBot
                 {
                     Console.WriteLine("Trying token login...");
                     _client = new WolfClient(token: token);
-                    Console.WriteLine("Client created with token.");
+                    await _client.Connect();
+                    Console.WriteLine("Connect finished. Check WOLF to see if the bot is online.");
                     await Task.Delay(-1);
                     return;
                 }
