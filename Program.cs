@@ -19,14 +19,15 @@ namespace BalloonBot
 
             if (!hasToken && !hasLogin)
             {
-                Console.WriteLine("❌ لا يوجد WOLF_TOKEN ولا WOLF_EMAIL/WOLF_PASSWORD في متغيرات البيئة.");
+                Console.WriteLine("ERROR: no WOLF_TOKEN and no WOLF_EMAIL/WOLF_PASSWORD found.");
                 return;
             }
 
-            // 1) المحاولة الأولى: الدخول بالتوكن
             if (hasToken)
             {
                 try
                 {
-                    Console.WriteLine("🔄 محاولة الدخول بالتوكن...");
+                    Console.WriteLine("Trying token login...");
                     _client = new WolfClient(token: token);
+                    Console.WriteLine("Client created with token.");
+                    await Task.Delay(-1);
